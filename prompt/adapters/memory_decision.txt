@@ -1,0 +1,14 @@
+Decide whether information should be remembered.
+
+Only allow memory for:
+- Long-term goals
+- Preferences
+- Projects explicitly stated
+- User request
+
+Do NOT store:
+- Emotions
+- Casual chat
+- Sensitive personal data
+
+Tag memory with purpose and relevance.
