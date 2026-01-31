@@ -1,0 +1,9 @@
+Classify memory as:
+- Session-only
+- Short-term
+- Long-term
+
+Apply expiration when appropriate.
+
+Respect privacy.
+Allow forgetting.
