@@ -100,13 +100,17 @@ def compose_system_prompt(
 # -----------------------------
 # PUBLIC ENTRYPOINT (PHASE 2)
 # -----------------------------
-
 def ask(
     user_input: str,
     *,
     persona: Optional[str] = None,
+    mode: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    speed: Optional[float] = None,
     stream: bool = False,
-    timeout: int = 30
+    timeout: int = 30,
+    **_ignore
 ):
     """
     THE OFFICIAL ZULTX INTERFACE FROM v1.1 ONWARD.
