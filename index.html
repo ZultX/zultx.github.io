@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ZULTX ∞</title>
+<style>
+:root{
+  --bg:#000;
+  --panel:#0b0b0b;
+  --muted:#9aa0a6;
+  --text:#eaeaea;
+  --accent:#18d018;
+  --outline:#121212;
+  --glass: rgba(255,255,255,0.03);
+  --side-w: 320px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:var(--text);background:var(--bg)}
+header{height:64px;display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--outline);background:linear-gradient(180deg,#041,#0000)}
+.logo{font-weight:800;letter-spacing:1px;font-size:20px;display:flex;align-items:center;gap:8px}
+.logo .fire{background:linear-gradient(90deg,#ff3b3b,#ff8a00);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900}
+.logo .x-black{color:#000;background:#e6e6e6;padding:2px 6px;border-radius:3px}
+.top-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+.top-actions button{background:var(--glass);border:1px solid var(--outline);padding:8px 12px;border-radius:8px;color:var(--text);cursor:pointer}
+
+.app{display:flex;height:calc(100% - 64px);}
+
+/* side panel */
+.side{width:var(--side-w);background:linear-gradient(180deg,#050505,#0b0b0b);border-right:1px solid var(--outline);padding:12px;overflow:auto}
+.side .menu-btn{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
+.side .menu-btn:hover{background:rgba(255,255,255,0.02)}
+.side h3{margin:12px 0 6px;color:var(--muted);font-weight:600}
+
+/* main chat */
+.main{flex:1;display:flex;flex-direction:column;position:relative}
+.center-screen{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted)}
+.chat-wrap{display:flex;flex-direction:column;gap:12px;padding:18px;max-width:900px;margin:0 auto;flex:1;overflow:auto}
+.msg{padding:12px 14px;border-radius:12px;max-width:78%;white-space:pre-wrap;opacity:0;transform:translateY(6px);animation:fadeIn 240ms ease forwards}
+@keyframes fadeIn{to{opacity:1;transform:none}}
+.msg.user{background:#071326;margin-left:auto;border-top-right-radius:2px;color:#bfe}
+.msg.ai{background:linear-gradient(180deg,#0f1720,#07101a);margin-right:auto;border-top-left-radius:2px}
+.meta{font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:8px;align-items:center}
+
+/* typing indicator + cursor */
+.typing{display:inline-block;margin-left:6px;font-size:12px;color:var(--muted)}
+.cursor{display:inline-block;width:10px;height:18px;margin-left:6px;background:var(--text);border-radius:2px;animation:blink 1s steps(2,end) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* input bar */
+.compose{padding:12px;border-top:1px solid var(--outline);display:flex;gap:8px;align-items:center;background:var(--panel)}
+.compose textarea{flex:1;background:#000;border:1px solid var(--outline);padding:12px;border-radius:10px;color:var(--text);min-height:46px;resize:none}
+.compose button{background:var(--accent);border:none;padding:10px 16px;border-radius:10px;font-weight:700;cursor:pointer;color:#000}
+
+/* small helpers */
+.hint{color:var(--muted);font-size:13px;text-align:center;margin-top:8px}
+.mode-pill{padding:6px 8px;border-radius:999px;background:#0c0c0c;border:1px solid var(--outline);font-size:13px;color:var(--muted)}
+.fab{position:fixed;right:20px;bottom:20px;background:linear-gradient(180deg,#16c516,#0aa50a);color:#000;padding:12px 14px;border-radius:999px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+@media(max-width:880px){.side{display:none}:root{--side-w:260px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span class="fire">Zul</span><span style="color:#fff">t</span><span class="x-black">X</span></div>
+  <div class="top-actions">
+    <button id="hamb">☰</button>
+    <button id="lettersBtn">✉️ Letters</button>
+    <div id="modePill" class="mode-pill">Mode: Friend</div>
+  </div>
+</header>
+
+<div class="app">
+  <aside class="side" id="sidePanel">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center"><strong>ZULTX</strong><small style="color:var(--muted)"> v1.1</small></div>
+      <div style="font-size:12px;color:var(--muted)">Hardik</div>
+    </div>
+
+    <h3>Your Chats</h3>
+    <div id="historyList">
+      <div class="menu-btn" onclick="newChat()">+ New chat</div>
+    </div>
+
+    <h3>Letters</h3>
+    <div id="lettersList" style="display:flex;flex-direction:column;gap:6px"></div>
+    <div style="height:20px"></div>
+    <div class="hint">Tap messages to open. Use Tip (🍏) to support.</div>
+  </aside>
+
+  <main class="main">
+    <div id="centerScreen" class="center-screen">
+      <div style="max-width:720px">
+        <div style="font-size:28px;font-weight:800;margin-bottom:16px">What can I help with?</div>
+        <div style="display:flex;gap:8px;justify-content:center">
+          <button onclick="focusInput()" style="padding:10px 14px;border-radius:999px;border:1px solid var(--outline);background:transparent;color:var(--text);cursor:pointer">Ask Something To ZultX..</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="chatArea" class="chat-wrap" style="display:none"></div>
+
+    <div class="compose">
+      <textarea id="input" placeholder="Ask ZULTX..." rows="1"></textarea>
+      <button id="sendBtn">Send</button>
+    </div>
+  </main>
+</div>
+
+<button class="fab" id="tipBtn">🍏 Tip</button>
+
+<!-- letters modal -->
+<div id="lettersModal" style="display:none;position:fixed;left:8%;top:8%;right:8%;bottom:8%;background:#061212;border-radius:12px;padding:18px;z-index:60;overflow:auto;border:1px solid #142">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2>Letters</h2>
+    <button onclick="closeLetters()">Close</button>
+  </div>
+  <div id="modalLettersContent" style="white-space:pre-wrap;color:var(--text);margin-top:12px"></div>
+</div>
+
+<!-- tip modal -->
+<div id="tipModal" style="display:none;position:fixed;left:20%;top:18%;right:20%;background:#061212;border-radius:12px;padding:18px;z-index:70;border:1px solid #142">
+  <h3>Tip ZULTX</h3>
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <button onclick="createTip(10)">₹10</button>
+    <button onclick="createTip(40)">₹40</button>
+    <button onclick="createTip(100)">₹100</button>
+    <button onclick="createTip(500)">₹500</button>
+    <button onclick="createTip(1100)">₹1100</button>
+  </div>
+  <div style="margin-top:12px"><button onclick="closeTip()">Cancel</button></div>
+</div>
+
+<!-- UPI QR modal (desktop fallback) -->
+<div id="qrModal" style="display:none;position:fixed;left:18%;top:12%;right:18%;background:#061212;border-radius:12px;padding:18px;z-index:71;border:1px solid #142;text-align:center">
+  <h3>Scan to pay (UPI)</h3>
+  <div id="qrImgWrap" style="margin-top:12px"></div>
+  <div style="margin-top:12px">
+    <button id="copyUpiBtn">Copy UPI</button>
+    <button onclick="closeQr()">Close</button>
+  </div>
+</div>
+
+<script>
+const chatArea = document.getElementById("chatArea");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+const centerScreen = document.getElementById("centerScreen");
+const sidePanel = document.getElementById("sidePanel");
+let streaming = false;
+
+function focusInput(){
+  centerScreen.style.display = "none";
+  chatArea.style.display = "flex";
+  input.focus();
+}
+
+function newChat(){
+  chatArea.innerHTML = "";
+  centerScreen.style.display = "none";
+  chatArea.style.display = "flex";
+  addSystemMsg("New chat started.");
+}
+
+function addUserMsg(text){
+  const d = document.createElement("div");
+  d.className = "msg user";
+  d.textContent = text;
+  chatArea.appendChild(d);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  return d;
+}
+function addAiMsg(text){
+  const d = document.createElement("div");
+  d.className = "msg ai";
+  d.textContent = text;
+  chatArea.appendChild(d);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  return d;
+}
+function addSystemMsg(text){
+  const d = document.createElement("div");
+  d.style.textAlign = "center";
+  d.style.color = "var(--muted)";
+  d.style.fontSize = "13px";
+  d.textContent = text;
+  chatArea.appendChild(d);
+  chatArea.scrollTop = chatArea.scrollHeight;
+  return d;
+}
+
+function showTyping(flag){
+  let t = document.getElementById("typingIndicator");
+  if(flag){
+    if(!t){
+      t = document.createElement("div");
+      t.id = "typingIndicator";
+      t.className = "meta";
+      t.innerHTML = 'ZULTX is thinking<span class="cursor"></span>';
+      chatArea.appendChild(t);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+  } else {
+    const el = document.getElementById("typingIndicator");
+    if(el) el.remove();
+  }
+}
+
+async function sendMessage(){
+  const text = input.value.trim();
+  if(!text) return;
+  addUserMsg(text);
+  input.value = "";
+  sendBtn.disabled = true;
+  streaming = true;
+  showTyping(true);
+
+  const aiDiv = addAiMsg("");
+  try{
+    const res = await fetch(`/ask?q=${encodeURIComponent(text)}&stream=true`);
+    if(!res.ok){
+      aiDiv.textContent = "⚠️ Server error: "+(await res.text());
+      sendBtn.disabled = false;
+      streaming = false;
+      showTyping(false);
+      return;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    while(true){
+      const {value, done} = await reader.read();
+      if(done) break;
+      aiDiv.textContent += dec.decode(value);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+    addFeedbackRow(aiDiv, text);
+  }catch(e){
+    aiDiv.textContent = "⚠️ Connection error.";
+  }
+  sendBtn.disabled = false;
+  streaming = false;
+  showTyping(false);
+}
+
+sendBtn.onclick = sendMessage;
+input.addEventListener("keydown", e=>{
+  if(e.key === "Enter" && !e.shiftKey){
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+function addFeedbackRow(aiDiv, q){
+  const row = document.createElement("div");
+  row.className = "meta";
+  row.innerHTML = `
+    <button onclick="vote('up',this)">👍</button>
+    <button onclick="vote('down',this)">👎</button>
+    <button onclick="generateShare(this)">Share</button>
+  `;
+  aiDiv.after(row);
+}
+
+async function vote(kind,btn){
+  const payload = {type: kind, time: Date.now()};
+  await fetch("/feedback", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+  btn.textContent = kind === 'up' ? 'Thanks 👍' : 'Saved 👎';
+}
+
+function generateShare(btn){
+  const msg = btn.parentNode.previousSibling.textContent || "";
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 630;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#041014";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 48px Inter, Arial";
+  ctx.fillText("ZULTX", 40, 90);
+  ctx.fillStyle = "#cfe";
+  ctx.font = "28px Inter, Arial";
+  const lines = wrapText(ctx, msg, 1120);
+  let y = 160;
+  for(const line of lines){
+    ctx.fillText(line, 40, y);
+    y += 42;
+    if(y > 560) break;
+  }
+  const data = canvas.toDataURL("image/png");
+  const link = document.createElement("a");
+  link.href = data;
+  link.download = "zultx-share.png";
+  link.click();
+}
+
+function wrapText(ctx, text, maxWidth){
+  const words = text.split(/\s+/);
+  const lines = [];
+  let current = "";
+  for(const w of words){
+    const test = current ? current + " " + w : w;
+    const m = ctx.measureText(test).width;
+    if(m > maxWidth){
+      lines.push(current);
+      current = w;
+    } else {
+      current = test;
+    }
+  }
+  if(current) lines.push(current);
+  return lines;
+}
+
+// Letters
+async function loadLetters(){
+  const res = await fetch("/letters");
+  const data = await res.json();
+  const list = document.getElementById("lettersList");
+  list.innerHTML = "";
+  (data.letters||[]).forEach(name=>{
+    const el = document.createElement("div");
+    el.className = "menu-btn";
+    el.textContent = name;
+    el.onclick = ()=>openLetter(name);
+    list.appendChild(el);
+  });
+}
+async function openLetter(name){
+  const res = await fetch(`/letters/${encodeURIComponent(name)}`);
+  if(!res.ok) return alert("Unable to open")
+  const text = await res.text();
+  document.getElementById("modalLettersContent").textContent = text;
+  document.getElementById("lettersModal").style.display = "block";
+}
+function closeLetters(){ document.getElementById("lettersModal").style.display="none" }
+
+// Tip modal + UPI flow
+document.getElementById("tipBtn").onclick = ()=>{ document.getElementById("tipModal").style.display = "block"; }
+function closeTip(){ document.getElementById("tipModal").style.display = "none"; }
+
+async function createTip(amount){
+  // ask server for UPI link + QR
+  const res = await fetch("/tip", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({amount})});
+  const data = await res.json();
+  if(!data.ok){
+    alert("Tip creation failed: " + (data.note || data.error || "unknown"));
+    closeTip();
+    return;
+  }
+  const upi_link = data.upi_link;
+  const qr = data.qr;
+  // mobile: try to open the UPI intent (works on Android/iPhone with UPI)
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(isMobile){
+    // Redirect to UPI link — phone will prompt UPI apps
+    window.location.href = upi_link;
+    closeTip();
+    // Optionally show a tiny confirmation prompt after a few seconds (client will then call /tip/confirm)
+    setTimeout(()=> {
+      const ok = confirm("Did the payment app open? If you completed the tip, press OK to record it (you can paste txn id).");
+      if(ok){
+        const payment_id = prompt("Optional: paste payment id / txn id (if you have it)","");
+        fetch("/tip/confirm", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({order_id: data.order.id, payment_id, amount})});
+      }
+    }, 1200);
+    return;
+  }
+  // Desktop: show QR modal and copy button
+  openQr(qr, upi_link);
+  closeTip();
+}
+
+function openQr(qrUrl, upiLink){
+  const wrap = document.getElementById("qrImgWrap");
+  wrap.innerHTML = `<img src="${qrUrl}" alt="UPI QR" style="width:280px;height:280px;border-radius:8px"/>`;
+  const copyBtn = document.getElementById("copyUpiBtn");
+  copyBtn.onclick = async ()=>{
+    try{
+      await navigator.clipboard.writeText(upiLink);
+      copyBtn.textContent = "Copied ✓";
+    }catch(e){
+      alert("Copy failed — UPI link: " + upiLink);
+    }
+  };
+  document.getElementById("qrModal").style.display = "block";
+}
+
+function closeQr(){ document.getElementById("qrModal").style.display = "none"; }
+
+// hamburger toggle
+document.getElementById("hamb").onclick = ()=>{
+  if(sidePanel.style.display === "none" || getComputedStyle(sidePanel).display === "none"){
+    sidePanel.style.display = "block";
+  } else {
+    sidePanel.style.display = "none";
+  }
+};
+
+document.getElementById("lettersBtn").onclick = async ()=>{
+  await loadLetters();
+  document.getElementById("lettersModal").style.display = "block";
+};
+
+// init
+loadLetters();
+</script>
+</body>
+</html>
