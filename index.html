@@ -20,18 +20,17 @@
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:var(--text);background:var(--bg)}
-header{
-  height:72px;
-  display:flex;
-  align-items:center;
-  gap:12px;
-  padding:10px 16px;
-  border-bottom:1px solid var(--outline);
-  background:var(--header-bg);
-  color:var(--header-text);
-  position:relative;
-  z-index:40;
-  box-shadow:0 6px 18px rgba(0,0,0,0.2);
+header {
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+}
+
+.top-tip,
+.top-actions,
+.top-center {
+  pointer-events: auto;
+  z-index: 10000;
 }
 .logo{
   font-weight:900;
@@ -148,30 +147,18 @@ header{
   .halfpanel{width:86%}
   .center-screen .bigBtn{width:100%}
 }
-  /* 🔥 Mobile header fix */
-/* 🔥 Mobile header fix */
+
 @media (max-width: 520px) {
-
   .top-center {
-    position: absolute;
-    right: 12px;
-    top: 56px;
+    position: static;
+    transform: none;
+    margin-left: auto;
   }
 
-  .top-tip {
-    padding: 6px 10px;
-    font-size: 13px;
-    gap: 6px;
-  }
-
-  .top-tip .apple {
-    padding: 4px;
-    font-size: 14px;
-  }
-
-  .top-actions button {
-    padding: 6px 10px;
-    font-size: 13px;
+  header {
+    flex-wrap: wrap;
+    height: auto;
+    padding-bottom: 8px;
   }
 }
   
@@ -442,7 +429,8 @@ async function sendMessage() {
     sendBtn.disabled = false;
     streaming = false;
   }
-      
+} 
+  
 /* safe add used in fallback parsing */
 function addToAiSafe(t){
   if(!t) return;
