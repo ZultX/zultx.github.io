@@ -14,173 +14,131 @@
   --outline:#1a1a1a;
   --glass: rgba(255,255,255,0.03);
   --side-w: 320px;
-  --header-bg: #ffffff; /* user requested white top */
+  --header-bg: #ffffff;
   --header-text: #0a0a0a;
   --tip-color: #2e8b57;
+  --header-h: 72px;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:var(--text);background:var(--bg)}
-header {
-  position: sticky;
-  top: 0;
-  z-index: 9999;
-}
-
-.top-tip,
-.top-actions,
-.top-center {
-  pointer-events: auto;
-  z-index: 10000;
-}
-.logo{
-  font-weight:900;
-  letter-spacing:0.6px;
-  font-size:20px;
+/* ---------- HEADER (fixed, flexible) ---------- */
+header{
+  position:sticky;
+  top:0;
+  z-index:9999;
+  height:var(--header-h);
   display:flex;
   align-items:center;
-  gap:8px;
-}
-.logo .fire{
-  background:linear-gradient(90deg,#ff3b3b,#ff8a00);
-  -webkit-background-clip:text;
-  background-clip:text;
-  color:transparent;
-  font-weight:900;
-}
-.logo .x-black{
-  background:#000;
-  color:#fff;
-  padding:4px 8px;
-  border-radius:6px;
-  font-weight:800;
-}
-.top-center {
-  position:absolute;
-  left:50%;
-  transform:translateX(-50%);
-  display:flex;
-  align-items:center;
+  justify-content:space-between;
   gap:12px;
+  padding:10px 14px;
+  background:var(--header-bg);
+  color:var(--header-text);
+  border-bottom:1px solid var(--outline);
+  box-shadow:0 6px 18px rgba(0,0,0,0.12);
+  -webkit-tap-highlight-color: transparent;
 }
-.top-center button {
-  background:#fff;
-  border:1px solid #e6e6e6;
-  padding:8px 12px;
-  border-radius:999px;
-  font-weight:700;
-  cursor:pointer;
-  box-shadow:0 6px 18px rgba(0,0,0,0.08);
+
+/* left / center / right slots so behavior is consistent */
+.header-left, .header-center, .header-right{
+  display:flex;
+  align-items:center;
+  gap:10px;
 }
-.top-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
-.top-actions button{background:var(--glass);border:1px solid var(--outline);padding:8px 12px;border-radius:8px;color:var(--text);cursor:pointer}
 
-/* layout */
-.app{display:flex;height:calc(100% - 72px);}
+/* left (hamburger + logo) */
+.logo{ font-weight:900; letter-spacing:0.6px; font-size:20px; display:flex; align-items:center; gap:8px; color:var(--header-text)}
+.logo .fire{ background:linear-gradient(90deg,#ff3b3b,#ff8a00); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:900 }
+.logo .x-black{ background:#000; color:#fff; padding:4px 8px; border-radius:6px; font-weight:800 }
 
-/* left side panel (history) */
+/* center (Tip / small controls) - desktop centers, mobile reflows below */
+.header-center { flex: 0 0 auto; justify-content:center; min-width:0; }
+.top-tip{
+  display:inline-flex; align-items:center; gap:8px; padding:8px 14px;
+  border-radius:999px; border:1px solid #eee; background:linear-gradient(180deg,#fff,#f7f7f7);
+  box-shadow:0 6px 18px rgba(0,0,0,0.06); color:#012; cursor:pointer; user-select:none;
+}
+.top-tip .apple{ display:inline-flex; align-items:center; justify-content:center; padding:6px; border-radius:8px; font-weight:800; background:linear-gradient(180deg,#92e08a,#3cb371) }
+
+/* right (letters + pill) */
+.top-actions{ display:flex; gap:8px; align-items:center; margin-left:auto; }
+.top-actions button{ background:var(--glass); border:1px solid var(--outline); padding:8px 12px; border-radius:8px; color:var(--text); cursor:pointer; min-height:40px }
+
+/* ensure clickable on top - pointer events kept */
+.top-tip, .top-actions button, #hamb { pointer-events:auto; z-index:10000 }
+
+/* ---------- layout ---------- */
+.app{ display:flex; height:calc(100% - var(--header-h)); }
+
+/* side panel */
 .side{
   width:var(--side-w);
   background:linear-gradient(180deg,#08090a,#0b0b0b);
   border-right:1px solid var(--outline);
-  padding:12px;
-  overflow:auto;
-  transition:transform .28s ease;
-  position:relative;
+  padding:12px; overflow:auto; transition:transform .28s ease; position:relative;
   z-index:10;
 }
-.side .menu-btn{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
-.side .menu-btn:hover{background:rgba(255,255,255,0.02)}
-.side h3{margin:12px 0 6px;color:var(--muted);font-weight:600}
-
-/* half-panel overlay when hamburger pressed */
-.halfpanel {
-  position:fixed;
-  left:0;
-  top:72px;
-  bottom:0;
-  width:50%;
-  max-width:720px;
-  background:linear-gradient(180deg,#060708,#0b0b0b);
-  border-right:1px solid var(--outline);
-  padding:18px;
-  transform:translateX(-110%);
-  transition:transform .28s cubic-bezier(.2,.9,.2,1);
-  z-index:80;
-  box-shadow: 6px 0 40px rgba(0,0,0,0.6);
-  overflow:auto;
-}
-.halfpanel.open{transform:translateX(0%)}
-.halfpanel .closeBtn{position:absolute;right:12px;top:12px;background:transparent;border:1px solid rgba(255,255,255,0.04);padding:6px 8px;border-radius:8px;color:var(--muted);cursor:pointer}
+.side .menu-btn{ display:flex; align-items:center; gap:8px; padding:10px; border-radius:10px; cursor:pointer; border:1px solid transparent}
+.side .menu-btn:hover{ background:rgba(255,255,255,0.02) }
 
 /* main chat */
-.main{flex:1;display:flex;flex-direction:column;position:relative}
-.center-screen{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted)}
-.chat-wrap{display:flex;flex-direction:column;gap:12px;padding:18px;max-width:900px;margin:0 auto;flex:1;overflow:auto}
-.msg{padding:12px 14px;border-radius:12px;max-width:78%;white-space:pre-wrap;opacity:0;transform:translateY(6px);animation:fadeIn 240ms ease forwards}
-@keyframes fadeIn{to{opacity:1;transform:none}}
-.msg.user{background:#071326;margin-left:auto;border-top-right-radius:2px;color:#bfe}
-.msg.ai{background:linear-gradient(180deg,#0f1720,#07101a);margin-right:auto;border-top-left-radius:2px}
-.meta{font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:8px;align-items:center}
+.main{ flex:1; display:flex; flex-direction:column; position:relative }
+.center-screen{ flex:1; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--muted) }
+.chat-wrap{ display:flex; flex-direction:column; gap:12px; padding:18px; max-width:900px; margin:0 auto; flex:1; overflow:auto }
+.msg{ padding:12px 14px; border-radius:12px; max-width:78%; white-space:pre-wrap; opacity:0; transform:translateY(6px); animation:fadeIn 240ms ease forwards }
+@keyframes fadeIn{ to{ opacity:1; transform:none } }
+.msg.user{ background:#071326; margin-left:auto; border-top-right-radius:2px; color:#bfe }
+.msg.ai{ background:linear-gradient(180deg,#0f1720,#07101a); margin-right:auto; border-top-left-radius:2px }
+.meta{ font-size:12px; color:var(--muted); margin-top:4px; display:flex; gap:8px; align-items:center }
 
 /* typing indicator */
-.typing{display:inline-block;margin-left:6px;font-size:12px;color:var(--muted)}
-.cursor{display:inline-block;width:10px;height:18px;margin-left:6px;background:var(--text);border-radius:2px;animation:blink 1s steps(2,end) infinite}
+.typing{ display:inline-block; margin-left:6px; font-size:12px; color:var(--muted) }
+.cursor{ display:inline-block; width:10px; height:18px; margin-left:6px; background:var(--text); border-radius:2px; animation:blink 1s steps(2,end) infinite }
 @keyframes blink{50%{opacity:0}}
 
 /* input bar */
-.compose{padding:12px;border-top:1px solid var(--outline);display:flex;gap:8px;align-items:center;background:linear-gradient(180deg,#020203,#0b0b0b)}
-.compose textarea{flex:1;background:transparent;border:1px solid rgba(255,255,255,0.04);padding:12px;border-radius:12px;color:var(--text);min-height:46px;resize:none}
-.compose button{background:var(--accent);border:none;padding:10px 16px;border-radius:10px;font-weight:700;cursor:pointer;color:#000}
-
-/* top-tip button style (floating top center) */
-.top-tip{background:linear-gradient(180deg,#fff,#f7f7f7);border-radius:999px;padding:8px 14px;border:1px solid #eee;display:flex;align-items:center;gap:8px;cursor:pointer}
-.top-tip .apple{background:linear-gradient(180deg,#92e08a,#3cb371);padding:6px;border-radius:8px;font-weight:800;color:#012}
+.compose{ padding:12px; border-top:1px solid var(--outline); display:flex; gap:8px; align-items:center; background:linear-gradient(180deg,#020203,#0b0b0b) }
+.compose textarea{ flex:1; background:transparent; border:1px solid rgba(255,255,255,0.04); padding:12px; border-radius:12px; color:var(--text); min-height:46px; resize:none }
+.compose button{ background:var(--accent); border:none; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; color:#000 }
 
 /* small helpers */
-.hint{color:var(--muted);font-size:13px;text-align:center;margin-top:8px}
-.mode-pill{padding:6px 8px;border-radius:999px;background:#0c0c0c;border:1px solid var(--outline);font-size:13px;color:var(--muted)}
-.fab{position:fixed;right:20px;bottom:20px;background:linear-gradient(180deg,#16c516,#0aa50a);color:#000;padding:12px 14px;border-radius:999px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+.hint{ color:var(--muted); font-size:13px; text-align:center; margin-top:8px }
+.mode-pill{ padding:6px 8px; border-radius:999px; background:#0c0c0c; border:1px solid var(--outline); font-size:13px; color:var(--muted) }
 
-/* small responsive tweaks */
-@media(max-width:880px){
-  .side{display:none}
-  .halfpanel{width:86%}
-  .center-screen .bigBtn{width:100%}
+/* responsive (mobile) */
+@media (max-width:880px){
+  .side{ display:none }
+  .halfpanel{ width:86% }
+  .center-screen .bigBtn{ width:100% }
 }
 
-@media (max-width: 520px) {
-  .top-center {
-    position: static;
-    transform: none;
-    margin-left: auto;
-  }
-
-  header {
-    flex-wrap: wrap;
-    height: auto;
-    padding-bottom: 8px;
-  }
+/* mobile header stacking - safe, no overlap */
+@media (max-width:520px){
+  header{ height:auto; padding:10px; align-items:flex-start; flex-wrap:wrap }
+  .header-left{ order:0; width:100%; display:flex; gap:8px; align-items:center }
+  .header-center{ order:1; width:100%; justify-content:flex-start; margin:8px 0 }
+  .header-right{ order:2; width:100%; display:flex; gap:8px; align-items:center; justify-content:flex-start }
+  .top-tip{ padding:6px 10px; font-size:13px }
+  .top-tip .apple{ padding:4px; font-size:14px }
+  .top-actions button{ padding:6px 10px; font-size:13px }
 }
-  
 </style>
 </head>
 <body>
 <header>
-  <div style="display:flex;align-items:center;gap:12px">
+  <div class="header-left">
     <button id="hamb" aria-label="menu" style="background:transparent;border:0;font-size:20px;cursor:pointer">≡</button>
     <div class="logo"><span class="fire">Zult</span><span class="x-black">X</span></div>
   </div>
 
-  <div class="top-center">
-    <!-- Top center tip button -->
-    <div class="top-tip" id="topTipBtn" title="Tip ZultX">
-      <span class="apple">🍏</span>
-      <strong>Tip</strong>
+  <div class="header-center">
+    <div class="top-tip" id="topTipBtn" title="Tip ZultX" role="button" aria-pressed="false">
+      <span class="apple">🍏</span><strong>Tip</strong>
     </div>
   </div>
 
-  <div class="top-actions">
-    <button id="lettersBtn">✉️ Letters</button>
+  <div class="header-right top-actions">
+    <button id="lettersBtn" aria-haspopup="dialog">✉️ Letters</button>
     <div id="modePill" class="mode-pill">Mode: Friendly</div>
   </div>
 </header>
@@ -193,7 +151,7 @@ header {
   <hr style="border-color:var(--outline)"/>
   <div id="halfContent">
     <button style="margin:8px 0;padding:10px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.03)">Account</button>
-    <div style="margin-top:12px;color:var(--muted)">(This is a demo panel — wire up your real history & servers later)</div>
+    <div style="margin-top:12px;color:var(--muted)">(Demo panel — wire up real history later)</div>
   </div>
 </div>
 
@@ -256,7 +214,7 @@ header {
   <div style="margin-top:12px"><button onclick="closeTip()">Cancel</button></div>
 </div>
 
-<!-- UPI QR modal (desktop fallback) -->
+<!-- qr modal -->
 <div id="qrModal" style="display:none;position:fixed;left:18%;top:12%;right:18%;background:#061212;border-radius:12px;padding:18px;z-index:71;border:1px solid #142;text-align:center">
   <h3>Scan to pay (UPI)</h3>
   <div id="qrImgWrap" style="margin-top:12px"></div>
@@ -267,7 +225,7 @@ header {
 </div>
 
 <script>
-/* ---------- helpers ---------- */
+/* ---------- helpers & DOM refs ---------- */
 const chatArea = document.getElementById("chatArea");
 const input = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
@@ -275,6 +233,7 @@ const centerScreen = document.getElementById("centerScreen");
 const sidePanel = document.getElementById("sidePanel");
 const halfPanel = document.getElementById("halfPanel");
 let streaming = false;
+let lastAbortController = null;
 
 function focusInput(){
   centerScreen.style.display = "none";
@@ -282,14 +241,13 @@ function focusInput(){
   input.focus();
 }
 
+/* ---------- simple UI helpers ---------- */
 function newChat(){
   chatArea.innerHTML = "";
   centerScreen.style.display = "none";
   chatArea.style.display = "flex";
   addSystemMsg("New chat started.");
 }
-
-/* message elements */
 function addUserMsg(text){
   const d = document.createElement("div");
   d.className = "msg user";
@@ -316,8 +274,6 @@ function addSystemMsg(text){
   chatArea.scrollTop = chatArea.scrollHeight;
   return d;
 }
-
-/* typing indicator */
 function showTyping(flag){
   let t = document.getElementById("typingIndicator");
   if(flag){
@@ -325,7 +281,7 @@ function showTyping(flag){
       t = document.createElement("div");
       t.id = "typingIndicator";
       t.className = "meta";
-      t.innerHTML = 'ZultX will answer better..<span class="cursor"></span>';
+      t.innerHTML = 'ZultX is thinking<span class="cursor"></span>';
       chatArea.appendChild(t);
       chatArea.scrollTop = chatArea.scrollHeight;
     }
@@ -334,8 +290,6 @@ function showTyping(flag){
     if(el) el.remove();
   }
 }
-
-/* feedback row */
 function addFeedbackRow(aiDiv, q){
   const row = document.createElement("div");
   row.className = "meta";
@@ -347,91 +301,193 @@ function addFeedbackRow(aiDiv, q){
   aiDiv.after(row);
 }
 
-/* ---------- streaming-safe sendMessage ---------- */
-async function sendMessage() {
+/* ---------- robust streaming sendMessage ---------- */
+async function sendMessage(){
   const text = input.value.trim();
-  if (!text || streaming) return;
+  if(!text || streaming) return;
 
+  // UI
   focusInput();
   addUserMsg(text);
   input.value = "";
   sendBtn.disabled = true;
   streaming = true;
-
   showTyping(true);
   const aiDiv = addAiMsg("");
 
+  // Abort controller + timeout guard (prevents silent blocking)
+  if(lastAbortController){
+    try{ lastAbortController.abort(); }catch(_){}
+  }
+  const controller = new AbortController();
+  lastAbortController = controller;
+  const TIMEOUT_MS = 15000; // 15s to start responding
+  const timeoutId = setTimeout(()=> controller.abort(), TIMEOUT_MS);
+
   try {
     const res = await fetch(`/ask?q=${encodeURIComponent(text)}&stream=true`, {
-      headers: { "Accept": "text/event-stream" }
+      headers: { "Accept": "text/event-stream, application/json, text/plain" },
+      signal: controller.signal
     });
 
-    if (!res.ok || !res.body) {
-      aiDiv.textContent = "⚠️ Server error.";
+    // clear timeout if headers received
+    clearTimeout(timeoutId);
+
+    if(!res.ok){
+      // try to show backend error
+      let errText = await res.text().catch(()=> "Server error");
+      try{ errText = JSON.parse(errText).error || JSON.parse(errText).detail || errText } catch(_){}
+      aiDiv.textContent = "⚠️ Server error: " + errText;
       return;
     }
 
+    // If server didn't provide a body stream (rare), read full text and show fallback
+    if(!res.body){
+      const full = await res.text();
+      appendAiText(aiDiv, extractTextFromAny(full));
+      addFeedbackRow(aiDiv, text);
+      return;
+    }
+
+    // If response is SSE/text-stream, read in chunks
     const reader = res.body.getReader();
-    const decoder = new TextDecoder("utf-8");
+    const dec = new TextDecoder("utf-8");
     let buffer = "";
 
-    const append = (t) => {
-      if (!t) return;
+    // helper to append to ai bubble safely
+    function appendChunk(t){
+      if(!t) return;
       aiDiv.textContent += t;
       chatArea.scrollTop = chatArea.scrollHeight;
-    };
+    }
 
-    while (true) {
+    // Main read loop
+    while(true){
       const { value, done } = await reader.read();
-      if (done) break;
+      if(done) break;
+      buffer += dec.decode(value, { stream: true });
 
-      buffer += decoder.decode(value, { stream: true });
+      // Split into lines but allow multi-line data blocks (SSE typically 'data: {...}\n\n')
+      // We'll split on double-newline to get full event blocks first
+      const events = buffer.split(/\n\n/);
+      buffer = events.pop(); // keep partial trailing part
 
-      // process complete SSE lines
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop(); // keep unfinished line
-
-      for (const line of lines) {
-        if (!line.startsWith("data:")) continue;
-
-        const payload = line.slice(5).trim();
-        if (!payload || payload === "[DONE]") continue;
-
-        let obj;
-        try {
-          obj = JSON.parse(payload);
-        } catch {
-          continue; // 🚫 NEVER append raw junk
+      for(const ev of events){
+        // each ev may contain multiple lines like "data: {...}\n" or status lines
+        const lines = ev.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        let dataLines = [];
+        for(const l of lines){
+          if(l.startsWith("data:")){
+            dataLines.push(l.slice(5).trim());
+          }
         }
-
-        // ✅ OpenAI / Mistral
-        if (obj.choices?.[0]?.delta?.content) {
-          append(obj.choices[0].delta.content);
+        if(dataLines.length === 0){
+          // If no "data:" lines, treat entire block as raw text
+          const raw = ev.trim();
+          if(raw && raw !== "[DONE]"){
+            // attempt to extract JSON or just append raw
+            const maybe = extractTextFromAny(raw);
+            appendChunk(maybe);
+          }
           continue;
         }
 
-        // ✅ Gemini
-        if (obj.candidates?.[0]?.content?.parts) {
-          for (const p of obj.candidates[0].content.parts) {
-            if (p.text) append(p.text);
+        // Combine multi 'data:' lines (sometimes servers break JSON across lines)
+        const payload = dataLines.join("\n");
+        if(!payload || payload === "[DONE]") continue;
+
+        // Try JSON parse payload
+        let obj = null;
+        try { obj = JSON.parse(payload); } catch(e){ obj = null; }
+
+        if(obj){
+          // OpenAI/Mistral style: choices[].delta.content OR choices[].message.content
+          const choices = obj.choices;
+          if(Array.isArray(choices)){
+            for(const ch of choices){
+              // delta style
+              if(ch.delta && typeof ch.delta.content === "string"){
+                appendChunk(ch.delta.content);
+              } else if(ch.message && typeof ch.message.content === "string"){
+                appendChunk(ch.message.content);
+              } else if(typeof ch.text === "string"){
+                appendChunk(ch.text);
+              }
+            }
+            continue;
           }
+
+          // Gemini-ish: candidates[0].content.parts[].text
+          if(obj.candidates && obj.candidates[0] && obj.candidates[0].content && Array.isArray(obj.candidates[0].content.parts)){
+            for(const p of obj.candidates[0].content.parts){
+              if(p.text) appendChunk(p.text);
+            }
+            continue;
+          }
+
+          // Generic fallback: extract any content fields
+          const text = extractTextFromAny(JSON.stringify(obj));
+          appendChunk(text);
+        } else {
+          // Not JSON — append raw payload
+          appendChunk(payload);
         }
+      } // events
+    } // while
+
+    // flush any remaining buffer (could be a final JSON without trailing blank line)
+    if(buffer && buffer.trim() && buffer.trim() !== "[DONE]"){
+      const remaining = buffer.trim();
+      try {
+        const p = JSON.parse(remaining);
+        const maybe = extractTextFromAny(JSON.stringify(p));
+        appendChunk(maybe);
+      } catch {
+        appendChunk(remaining);
       }
     }
 
     addFeedbackRow(aiDiv, text);
 
-  } catch (err) {
-    console.error(err);
-    aiDiv.textContent = "⚠️ Connection lost.";
+  } catch(err){
+    // Abort error vs network error
+    if(err.name === 'AbortError'){
+      aiDiv.textContent = "⚠️ No response — server taking too long. Try again.";
+    } else {
+      console.error(err);
+      aiDiv.textContent = "⚠️ Connection lost.";
+    }
   } finally {
     showTyping(false);
     sendBtn.disabled = false;
     streaming = false;
   }
-} 
-  
-/* safe add used in fallback parsing */
+}
+
+/* small helper: attempt to find any human text inside messy JSON/raw */
+function extractTextFromAny(s){
+  if(!s) return "";
+  try{
+    const j = JSON.parse(s);
+    // prefer common fields
+    if(typeof j === 'string') return j;
+    if(j.content && typeof j.content === 'string') return j.content;
+    if(j.text && typeof j.text === 'string') return j.text;
+    if(j.choices && j.choices[0]){
+      const ch = j.choices[0];
+      if(ch.text) return ch.text;
+      if(ch.delta && ch.delta.content) return ch.delta.content;
+      if(ch.message && ch.message.content) return ch.message.content;
+    }
+    // fallback: walk object to find a string value
+    const fl = JSON.stringify(j).match(/"([^"]{8,})"/);
+    return fl ? fl[1] : JSON.stringify(j).slice(0,500);
+  }catch(e){
+    return s;
+  }
+}
+
+/* fallback safe append (not used primary) */
 function addToAiSafe(t){
   if(!t) return;
   const last = document.querySelector(".msg.ai:last-of-type");
@@ -439,7 +495,7 @@ function addToAiSafe(t){
   chatArea.scrollTop = chatArea.scrollHeight;
 }
 
-/* ---------- small utilities ---------- */
+/* ---------- small utilities (buttons, letters, tip, etc.) ---------- */
 sendBtn.onclick = sendMessage;
 input.addEventListener("keydown", e=>{
   if(e.key === "Enter" && !e.shiftKey){
@@ -450,11 +506,11 @@ input.addEventListener("keydown", e=>{
 
 async function vote(kind,btn){
   const payload = {type: kind, time: Date.now()};
-  await fetch("/feedback", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
-  btn.textContent = kind === 'up' ? 'Thanks 👍' : 'I am sorry 😔';
+  try{ await fetch("/feedback", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)}); }catch(_){}
+  btn.textContent = kind === 'up' ? 'Thanks 👍' : 'Sorry 😔';
 }
 
-/* share card generator */
+/* share generator (unchanged) */
 function generateShare(btn){
   const msg = (btn.parentNode.previousSibling && btn.parentNode.previousSibling.textContent) || "";
   const canvas = document.createElement("canvas");
@@ -470,98 +526,4 @@ function generateShare(btn){
     y += 42;
     if(y > 560) break;
   }
-  const data = canvas.toDataURL("image/png");
-  const link = document.createElement("a"); link.href = data; link.download = "zultx-share.png"; link.click();
-}
-function wrapText(ctx, text, maxWidth){
-  const words = text.split(/\s+/);
-  const lines = []; let current = "";
-  for(const w of words){
-    const test = current ? current + " " + w : w;
-    const m = ctx.measureText(test).width;
-    if(m > maxWidth){ lines.push(current); current = w; } else { current = test; }
-  }
-  if(current) lines.push(current);
-  return lines;
-}
-
-/* letters */
-async function loadLetters(){
-  try{
-    const res = await fetch("/letters");
-    const data = await res.json();
-    const list = document.getElementById("lettersList");
-    list.innerHTML = "";
-    (data.letters||[]).forEach(name=>{
-      const el = document.createElement("div");
-      el.className = "menu-btn";
-      el.textContent = name;
-      el.onclick = ()=>openLetter(name);
-      list.appendChild(el);
-    });
-  }catch(e){}
-}
-async function openLetter(name){
-  const res = await fetch(`/letters/${encodeURIComponent(name)}`);
-  if(!res.ok) return alert("Unable to open")
-  const text = await res.text();
-  document.getElementById("modalLettersContent").textContent = text;
-  document.getElementById("lettersModal").style.display = "block";
-}
-function closeLetters(){ document.getElementById("lettersModal").style.display="none" }
-
-/* tip handling (uses your /tip endpoint) */
-document.getElementById("topTipBtn").onclick = ()=>{ document.getElementById("tipModal").style.display = "block"; }
-function closeTip(){ document.getElementById("tipModal").style.display = "none"; }
-
-async function createTip(amount){
-  const res = await fetch("/tip", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({amount})});
-  const data = await res.json();
-  if(!data.ok){
-    alert("Tip creation failed: " + (data.note || data.error || "unknown"));
-    closeTip(); return;
-  }
-  const upi_link = data.upi_link;
-  const qr = data.qr;
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if(isMobile){
-    // open UPI intent
-    window.location.href = upi_link;
-    closeTip();
-    setTimeout(()=> {
-      const ok = confirm("Did your UPI app open? Press OK if you completed payment (you can paste txn id).");
-      if(ok){
-        const payment_id = prompt("Optional: paste payment id / txn id","");
-        fetch("/tip/confirm", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({order_id: data.order.id, payment_id, amount})});
-      }
-    }, 1200);
-    return;
-  }
-  openQr(qr, upi_link);
-  closeTip();
-}
-function openQr(qrUrl, upiLink){
-  const wrap = document.getElementById("qrImgWrap");
-  wrap.innerHTML = `<img src="${qrUrl}" alt="UPI QR" style="width:280px;height:280px;border-radius:8px"/>`;
-  const copyBtn = document.getElementById("copyUpiBtn");
-  copyBtn.onclick = async ()=>{
-    try{ await navigator.clipboard.writeText(upiLink); copyBtn.textContent = "Copied ✓"; }catch(e){ alert("Copy failed — UPI link: " + upiLink); }
-  };
-  document.getElementById("qrModal").style.display = "block";
-}
-function closeQr(){ document.getElementById("qrModal").style.display = "none"; }
-
-/* halfpanel toggles */
-document.getElementById("hamb").onclick = ()=>{
-  if(halfPanel.classList.contains("open")) closeHalf();
-  else openHalf();
-};
-function openHalf(){ halfPanel.classList.add("open"); halfPanel.setAttribute("aria-hidden","false"); }
-function closeHalf(){ halfPanel.classList.remove("open"); halfPanel.setAttribute("aria-hidden","true"); }
-
-/* init */
-loadLetters();
-</script>
-</body>
-</html>
-
+  c
