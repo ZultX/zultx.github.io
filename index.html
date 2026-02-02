@@ -19,8 +19,12 @@
   --tip-color: #2e8b57;
   --header-h: 72px;
 }
+
+/* Base reset */
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:var(--text);background:var(--bg)}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+.hidden{display:none !important; pointer-events:none !important;}
+
 /* ---------- HEADER (fixed, flexible) ---------- */
 header{
   position:sticky;
@@ -39,47 +43,43 @@ header{
   -webkit-tap-highlight-color: transparent;
 }
 
-/* left / center / right slots so behavior is consistent */
-.header-left, .header-center, .header-right{
-  display:flex;
-  align-items:center;
-  gap:10px;
+/* header slots */
+.header-left, .header-center, .header-right {
+  display:flex; align-items:center; gap:10px; min-width:0;
 }
-
-/* left (hamburger + logo) */
-.logo{ font-weight:900; letter-spacing:0.6px; font-size:20px; display:flex; align-items:center; gap:8px; color:var(--header-text)}
+.logo{ font-weight:900; letter-spacing:0.6px; font-size:20px; display:flex; align-items:center; gap:8px; color:var(--header-text) }
 .logo .fire{ background:linear-gradient(90deg,#ff3b3b,#ff8a00); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:900 }
 .logo .x-black{ background:#000; color:#fff; padding:4px 8px; border-radius:6px; font-weight:800 }
 
-/* center (Tip / small controls) - desktop centers, mobile reflows below */
-.header-center { flex: 0 0 auto; justify-content:center; min-width:0; }
+/* tip control (desktop) */
 .top-tip{
   display:inline-flex; align-items:center; gap:8px; padding:8px 14px;
   border-radius:999px; border:1px solid #eee; background:linear-gradient(180deg,#fff,#f7f7f7);
   box-shadow:0 6px 18px rgba(0,0,0,0.06); color:#012; cursor:pointer; user-select:none;
+  pointer-events:auto; z-index:10010;
 }
 .top-tip .apple{ display:inline-flex; align-items:center; justify-content:center; padding:6px; border-radius:8px; font-weight:800; background:linear-gradient(180deg,#92e08a,#3cb371) }
 
 /* right (letters + pill) */
 .top-actions{ display:flex; gap:8px; align-items:center; margin-left:auto; }
-.top-actions button{ background:var(--glass); border:1px solid var(--outline); padding:8px 12px; border-radius:8px; color:var(--text); cursor:pointer; min-height:40px }
+.top-actions button{ background:var(--glass); border:1px solid var(--outline); padding:8px 12px; border-radius:8px; color:var(--text); cursor:pointer; min-height:40px; pointer-events:auto; z-index:10010;}
 
-/* ensure clickable on top - pointer events kept */
-.top-tip, .top-actions button, #hamb { pointer-events:auto; z-index:10000 }
-
-/* ---------- layout ---------- */
-.app{ display:flex; height:calc(100% - var(--header-h)); }
+/* layout */
+.app{ display:flex; min-height:calc(100vh - var(--header-h)); }
 
 /* side panel */
 .side{
   width:var(--side-w);
   background:linear-gradient(180deg,#08090a,#0b0b0b);
   border-right:1px solid var(--outline);
-  padding:12px; overflow:auto; transition:transform .28s ease; position:relative;
-  z-index:10;
+  padding:12px; overflow:auto; transition:transform .28s ease; position:relative; z-index:10;
 }
 .side .menu-btn{ display:flex; align-items:center; gap:8px; padding:10px; border-radius:10px; cursor:pointer; border:1px solid transparent}
 .side .menu-btn:hover{ background:rgba(255,255,255,0.02) }
+
+/* halfpanel visible/hidden control */
+.halfpanel[aria-hidden="true"]{ display:none; pointer-events:none; }
+.halfpanel[aria-hidden="false"]{ display:block; pointer-events:auto; position:fixed; left:0; top:var(--header-h); bottom:0; width:50%; max-width:720px; background:linear-gradient(180deg,#060708,#0b0b0b); border-right:1px solid var(--outline); padding:18px; z-index:10020; box-shadow:6px 0 40px rgba(0,0,0,0.6); overflow:auto; }
 
 /* main chat */
 .main{ flex:1; display:flex; flex-direction:column; position:relative }
@@ -99,39 +99,55 @@ header{
 /* input bar */
 .compose{ padding:12px; border-top:1px solid var(--outline); display:flex; gap:8px; align-items:center; background:linear-gradient(180deg,#020203,#0b0b0b) }
 .compose textarea{ flex:1; background:transparent; border:1px solid rgba(255,255,255,0.04); padding:12px; border-radius:12px; color:var(--text); min-height:46px; resize:none }
-.compose button{ background:var(--accent); border:none; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; color:#000 }
+.compose button{ background:var(--accent); border:none; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; color:#000; pointer-events:auto; z-index:10010 }
 
 /* small helpers */
 .hint{ color:var(--muted); font-size:13px; text-align:center; margin-top:8px }
 .mode-pill{ padding:6px 8px; border-radius:999px; background:#0c0c0c; border:1px solid var(--outline); font-size:13px; color:var(--muted) }
 
+/* modals behavior */
+#lettersModal[aria-hidden="true"], #tipModal[aria-hidden="true"], #qrModal[aria-hidden="true"]{
+  display:none; pointer-events:none;
+}
+#lettersModal[aria-hidden="false"], #tipModal[aria-hidden="false"], #qrModal[aria-hidden="false"]{
+  display:block; pointer-events:auto; position:fixed; left:8%; top:12%; right:8%; bottom:12%; background:#061212; border-radius:12px; padding:18px; z-index:10030; overflow:auto; border:1px solid #142;
+}
+
 /* responsive (mobile) */
 @media (max-width:880px){
   .side{ display:none }
-  .halfpanel{ width:86% }
+  .halfpanel[aria-hidden="false"]{ width:86% }
   .center-screen .bigBtn{ width:100% }
 }
 
-/* mobile header stacking - safe, no overlap */
+/* mobile header stacking - keep it clean (old look) */
 @media (max-width:520px){
-  header{ height:auto; padding:10px; align-items:flex-start; flex-wrap:wrap }
-  .header-left{ order:0; width:100%; display:flex; gap:8px; align-items:center }
-  .header-center{ order:1; width:100%; justify-content:flex-start; margin:8px 0 }
-  .header-right{ order:2; width:100%; display:flex; gap:8px; align-items:center; justify-content:flex-start }
-  .top-tip{ padding:6px 10px; font-size:13px }
-  .top-tip .apple{ padding:4px; font-size:14px }
+  header{ height:auto; padding:10px; align-items:center; flex-wrap:nowrap; gap:10px }
+  .header-left{ order:0; width:auto; display:flex; gap:8px; align-items:center }
+  .header-center{ order:1; width:auto; justify-content:flex-start; margin-left:6px }
+  .header-right{ order:2; width:auto; display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-left:auto }
+  .top-tip{ padding:6px 10px; font-size:13px; }
+  .top-tip .apple{ padding:4px; font-size:14px; }
   .top-actions button{ padding:6px 10px; font-size:13px }
+  /* small mobile-tip - move tip slightly below header to avoid overlap */
+  .mobile-tip{ display:flex; justify-content:flex-start; gap:8px; padding:8px 12px; }
+  .mobile-tip .top-tip{ transform:none; }
 }
+
+/* ensure body content never sits over header interactively */
+main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+
 </style>
 </head>
 <body>
 <header>
   <div class="header-left">
-    <button id="hamb" aria-label="menu" style="background:transparent;border:0;font-size:20px;cursor:pointer">≡</button>
+    <button id="hamb" aria-label="menu" style="background:transparent;border:0;font-size:20px;cursor:pointer;pointer-events:auto;z-index:10010">≡</button>
     <div class="logo"><span class="fire">Zult</span><span class="x-black">X</span></div>
   </div>
 
   <div class="header-center">
+    <!-- Desktop tip sits in header center; mobile will use .mobile-tip shown below -->
     <div class="top-tip" id="topTipBtn" title="Tip ZultX" role="button" aria-pressed="false">
       <span class="apple">🍏</span><strong>Tip</strong>
     </div>
@@ -143,11 +159,18 @@ header{
   </div>
 </header>
 
+<!-- mobile-only small row to avoid overlap (keeps old clean feel) -->
+<div class="mobile-tip" style="display:none;padding:6px 12px;">
+  <div class="top-tip" id="mobileTip" title="Tip ZultX" role="button" aria-pressed="false" style="padding:6px 10px">
+    <span class="apple">🍏</span><strong style="font-weight:700">Tip</strong>
+  </div>
+</div>
+
 <!-- half screen panel (opens on hamburger) -->
 <div id="halfPanel" class="halfpanel" role="dialog" aria-hidden="true">
-  <button class="closeBtn" onclick="closeHalf()">✕</button>
+  <button class="closeBtn" onclick="closeHalf()" style="position:absolute;right:12px;top:12px">✕</button>
   <h2 style="margin-top:6px">ZultX — History & Servers</h2>
-  <p style="color:var(--muted);margin-top:8px">This panel covers half the screen (desktop/tablet). It shows chat history, servers, accounts and old AI sessions.</p>
+  <p style="color:var(--muted);margin-top:8px">This panel shows chat history, servers, accounts and old AI sessions.</p>
   <hr style="border-color:var(--outline)"/>
   <div id="halfContent">
     <button style="margin:8px 0;padding:10px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.03)">Account</button>
@@ -156,7 +179,7 @@ header{
 </div>
 
 <div class="app">
-  <aside class="side" id="sidePanel">
+  <aside class="side" id="sidePanel" aria-hidden="false">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div style="display:flex;gap:8px;align-items:center"><strong>ZultX</strong><small style="color:var(--muted)"> v1.1</small></div>
       <div style="font-size:12px;color:var(--muted)">Hardik</div>
@@ -193,7 +216,7 @@ header{
 </div>
 
 <!-- letters modal -->
-<div id="lettersModal" style="display:none;position:fixed;left:8%;top:12%;right:8%;bottom:12%;background:#061212;border-radius:12px;padding:18px;z-index:60;overflow:auto;border:1px solid #142">
+<div id="lettersModal" aria-hidden="true">
   <div style="display:flex;justify-content:space-between;align-items:center">
     <h2>Letters</h2>
     <button onclick="closeLetters()">Close</button>
@@ -202,7 +225,7 @@ header{
 </div>
 
 <!-- tip modal -->
-<div id="tipModal" style="display:none;position:fixed;left:18%;top:18%;right:18%;background:#061212;border-radius:12px;padding:18px;z-index:70;border:1px solid #142">
+<div id="tipModal" aria-hidden="true">
   <h3>Tip ZultX</h3>
   <div style="display:flex;gap:8px;margin-top:12px">
     <button onclick="createTip(10)">₹10</button>
@@ -215,7 +238,7 @@ header{
 </div>
 
 <!-- qr modal -->
-<div id="qrModal" style="display:none;position:fixed;left:18%;top:12%;right:18%;background:#061212;border-radius:12px;padding:18px;z-index:71;border:1px solid #142;text-align:center">
+<div id="qrModal" aria-hidden="true">
   <h3>Scan to pay (UPI)</h3>
   <div id="qrImgWrap" style="margin-top:12px"></div>
   <div style="margin-top:12px">
@@ -225,29 +248,48 @@ header{
 </div>
 
 <script>
-/* ---------- helpers & DOM refs ---------- */
+/* ---------- refs ---------- */
 const chatArea = document.getElementById("chatArea");
 const input = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
 const centerScreen = document.getElementById("centerScreen");
 const sidePanel = document.getElementById("sidePanel");
 const halfPanel = document.getElementById("halfPanel");
+
+const lettersModal = document.getElementById("lettersModal");
+const tipModal = document.getElementById("tipModal");
+const qrModal = document.getElementById("qrModal");
+
+const topTipBtn = document.getElementById("topTipBtn");
+const mobileTipBtn = document.getElementById("mobileTip");
+const lettersBtn = document.getElementById("lettersBtn");
+const hamb = document.getElementById("hamb");
+
 let streaming = false;
 let lastAbortController = null;
 
+/* ---------- small helpers ---------- */
+function setVisible(el, visible){
+  if(!el) return;
+  el.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  if(!visible) el.classList.add('hidden'); else el.classList.remove('hidden');
+}
 function focusInput(){
-  centerScreen.style.display = "none";
+  // hide center screen and ensure it does not block touches
+  centerScreen.classList.add('hidden');
+  centerScreen.style.pointerEvents = 'none';
   chatArea.style.display = "flex";
   input.focus();
 }
 
-/* ---------- simple UI helpers ---------- */
 function newChat(){
   chatArea.innerHTML = "";
-  centerScreen.style.display = "none";
+  centerScreen.classList.add('hidden');
   chatArea.style.display = "flex";
   addSystemMsg("New chat started.");
 }
+
+/* message helpers */
 function addUserMsg(text){
   const d = document.createElement("div");
   d.className = "msg user";
@@ -301,12 +343,11 @@ function addFeedbackRow(aiDiv, q){
   aiDiv.after(row);
 }
 
-/* ---------- robust streaming sendMessage ---------- */
+/* ---------- streaming sendMessage (robust) ---------- */
 async function sendMessage(){
   const text = input.value.trim();
   if(!text || streaming) return;
 
-  // UI
   focusInput();
   addUserMsg(text);
   input.value = "";
@@ -315,13 +356,12 @@ async function sendMessage(){
   showTyping(true);
   const aiDiv = addAiMsg("");
 
-  // Abort controller + timeout guard (prevents silent blocking)
   if(lastAbortController){
     try{ lastAbortController.abort(); }catch(_){}
   }
   const controller = new AbortController();
   lastAbortController = controller;
-  const TIMEOUT_MS = 15000; // 15s to start responding
+  const TIMEOUT_MS = 15000;
   const timeoutId = setTimeout(()=> controller.abort(), TIMEOUT_MS);
 
   try {
@@ -329,130 +369,95 @@ async function sendMessage(){
       headers: { "Accept": "text/event-stream, application/json, text/plain" },
       signal: controller.signal
     });
-
-    // clear timeout if headers received
     clearTimeout(timeoutId);
 
     if(!res.ok){
-      // try to show backend error
       let errText = await res.text().catch(()=> "Server error");
       try{ errText = JSON.parse(errText).error || JSON.parse(errText).detail || errText } catch(_){}
       aiDiv.textContent = "⚠️ Server error: " + errText;
       return;
     }
 
-    // If server didn't provide a body stream (rare), read full text and show fallback
     if(!res.body){
       const full = await res.text();
-      appendAiText(aiDiv, extractTextFromAny(full));
+      aiDiv.textContent += full;
       addFeedbackRow(aiDiv, text);
       return;
     }
 
-    // If response is SSE/text-stream, read in chunks
     const reader = res.body.getReader();
     const dec = new TextDecoder("utf-8");
     let buffer = "";
 
-    // helper to append to ai bubble safely
     function appendChunk(t){
       if(!t) return;
       aiDiv.textContent += t;
       chatArea.scrollTop = chatArea.scrollHeight;
     }
 
-    // Main read loop
     while(true){
       const { value, done } = await reader.read();
       if(done) break;
       buffer += dec.decode(value, { stream: true });
 
-      // Split into lines but allow multi-line data blocks (SSE typically 'data: {...}\n\n')
-      // We'll split on double-newline to get full event blocks first
       const events = buffer.split(/\n\n/);
-      buffer = events.pop(); // keep partial trailing part
+      buffer = events.pop();
 
       for(const ev of events){
-        // each ev may contain multiple lines like "data: {...}\n" or status lines
-        const lines = ev.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        let dataLines = [];
-        for(const l of lines){
-          if(l.startsWith("data:")){
-            dataLines.push(l.slice(5).trim());
-          }
-        }
+        const lines = ev.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+        const dataLines = lines.filter(l=>l.startsWith("data:")).map(l=>l.slice(5).trim());
+
         if(dataLines.length === 0){
-          // If no "data:" lines, treat entire block as raw text
           const raw = ev.trim();
-          if(raw && raw !== "[DONE]"){
-            // attempt to extract JSON or just append raw
-            const maybe = extractTextFromAny(raw);
-            appendChunk(maybe);
-          }
+          if(raw && raw !== "[DONE]") appendChunk(raw);
           continue;
         }
 
-        // Combine multi 'data:' lines (sometimes servers break JSON across lines)
         const payload = dataLines.join("\n");
         if(!payload || payload === "[DONE]") continue;
 
-        // Try JSON parse payload
         let obj = null;
         try { obj = JSON.parse(payload); } catch(e){ obj = null; }
 
         if(obj){
-          // OpenAI/Mistral style: choices[].delta.content OR choices[].message.content
+          // openai-style
           const choices = obj.choices;
           if(Array.isArray(choices)){
             for(const ch of choices){
-              // delta style
-              if(ch.delta && typeof ch.delta.content === "string"){
-                appendChunk(ch.delta.content);
-              } else if(ch.message && typeof ch.message.content === "string"){
-                appendChunk(ch.message.content);
-              } else if(typeof ch.text === "string"){
-                appendChunk(ch.text);
-              }
+              if(ch.delta && typeof ch.delta.content === "string") appendChunk(ch.delta.content);
+              else if(ch.message && typeof ch.message.content === "string") appendChunk(ch.message.content);
+              else if(typeof ch.text === "string") appendChunk(ch.text);
             }
             continue;
           }
-
-          // Gemini-ish: candidates[0].content.parts[].text
+          // gemini-ish
           if(obj.candidates && obj.candidates[0] && obj.candidates[0].content && Array.isArray(obj.candidates[0].content.parts)){
-            for(const p of obj.candidates[0].content.parts){
-              if(p.text) appendChunk(p.text);
-            }
+            for(const p of obj.candidates[0].content.parts) if(p.text) appendChunk(p.text);
             continue;
           }
 
-          // Generic fallback: extract any content fields
-          const text = extractTextFromAny(JSON.stringify(obj));
-          appendChunk(text);
+          // generic fallback
+          appendChunk(JSON.stringify(obj).slice(0,200));
         } else {
-          // Not JSON — append raw payload
           appendChunk(payload);
         }
-      } // events
-    } // while
+      }
+    }
 
-    // flush any remaining buffer (could be a final JSON without trailing blank line)
     if(buffer && buffer.trim() && buffer.trim() !== "[DONE]"){
-      const remaining = buffer.trim();
       try {
-        const p = JSON.parse(remaining);
-        const maybe = extractTextFromAny(JSON.stringify(p));
-        appendChunk(maybe);
+        const p = JSON.parse(buffer.trim());
+        appendChunk(JSON.stringify(p).slice(0,200));
       } catch {
-        appendChunk(remaining);
+        appendChunk(buffer.trim());
       }
     }
 
     addFeedbackRow(aiDiv, text);
 
   } catch(err){
-    // Abort error vs network error
     if(err.name === 'AbortError'){
-      aiDiv.textContent = "⚠️ No response — server taking too long. Try again.";
+      aiDiv.textContent = "⚠️ No response — server timed out. Try again.";
     } else {
       console.error(err);
       aiDiv.textContent = "⚠️ Connection lost.";
@@ -464,38 +469,13 @@ async function sendMessage(){
   }
 }
 
-/* small helper: attempt to find any human text inside messy JSON/raw */
-function extractTextFromAny(s){
-  if(!s) return "";
-  try{
-    const j = JSON.parse(s);
-    // prefer common fields
-    if(typeof j === 'string') return j;
-    if(j.content && typeof j.content === 'string') return j.content;
-    if(j.text && typeof j.text === 'string') return j.text;
-    if(j.choices && j.choices[0]){
-      const ch = j.choices[0];
-      if(ch.text) return ch.text;
-      if(ch.delta && ch.delta.content) return ch.delta.content;
-      if(ch.message && ch.message.content) return ch.message.content;
-    }
-    // fallback: walk object to find a string value
-    const fl = JSON.stringify(j).match(/"([^"]{8,})"/);
-    return fl ? fl[1] : JSON.stringify(j).slice(0,500);
-  }catch(e){
-    return s;
-  }
-}
-
-/* fallback safe append (not used primary) */
+/* ---------- utils ---------- */
 function addToAiSafe(t){
   if(!t) return;
   const last = document.querySelector(".msg.ai:last-of-type");
   if(last) last.textContent += t;
   chatArea.scrollTop = chatArea.scrollHeight;
 }
-
-/* ---------- small utilities (buttons, letters, tip, etc.) ---------- */
 sendBtn.onclick = sendMessage;
 input.addEventListener("keydown", e=>{
   if(e.key === "Enter" && !e.shiftKey){
@@ -503,14 +483,13 @@ input.addEventListener("keydown", e=>{
     sendMessage();
   }
 });
-
 async function vote(kind,btn){
   const payload = {type: kind, time: Date.now()};
   try{ await fetch("/feedback", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)}); }catch(_){}
   btn.textContent = kind === 'up' ? 'Thanks 👍' : 'Sorry 😔';
 }
 
-/* share generator (unchanged) */
+/* share generator */
 function generateShare(btn){
   const msg = (btn.parentNode.previousSibling && btn.parentNode.previousSibling.textContent) || "";
   const canvas = document.createElement("canvas");
@@ -526,4 +505,16 @@ function generateShare(btn){
     y += 42;
     if(y > 560) break;
   }
-  c
+  const data = canvas.toDataURL("image/png");
+  const link = document.createElement("a"); link.href = data; link.download = "zultx-share.png"; link.click();
+}
+function wrapText(ctx, text, maxWidth){
+  const words = (text||"").split(/\s+/);
+  const lines = []; let current = "";
+  for(const w of words){
+    const test = current ? current + " " + w : w;
+    const m = ctx.measureText(test).width;
+    if(m > maxWidth){ lines.push(current); current = w; } else { current = test; }
+  }
+  if(current) lines.push(current);
+  return lines;
