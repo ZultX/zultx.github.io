@@ -19,17 +19,15 @@
   --tip-color: #2e8b57;
   --header-h: 72px;
 }
-
-/* Base reset */
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
-.hidden{display:none !important; pointer-events:none !important;}
+.hidden{display:none !important; pointer-events:none !important}
 
-/* ---------- HEADER (fixed, flexible) ---------- */
+/* HEADER */
 header{
   position:sticky;
   top:0;
-  z-index:9999;
+  z-index:100000; /* VERY high so nothing sits on top */
   height:var(--header-h);
   display:flex;
   align-items:center;
@@ -42,101 +40,74 @@ header{
   box-shadow:0 6px 18px rgba(0,0,0,0.12);
   -webkit-tap-highlight-color: transparent;
 }
+.header-left,.header-center,.header-right{display:flex;align-items:center;gap:10px;min-width:0}
+.logo{font-weight:900;letter-spacing:0.6px;font-size:20px;display:flex;align-items:center;gap:8px;color:var(--header-text)}
+.logo .fire{background:linear-gradient(90deg,#ff3b3b,#ff8a00);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900}
+.logo .x-black{background:#000;color:#fff;padding:4px 8px;border-radius:6px;font-weight:800}
 
-/* header slots */
-.header-left, .header-center, .header-right {
-  display:flex; align-items:center; gap:10px; min-width:0;
-}
-.logo{ font-weight:900; letter-spacing:0.6px; font-size:20px; display:flex; align-items:center; gap:8px; color:var(--header-text) }
-.logo .fire{ background:linear-gradient(90deg,#ff3b3b,#ff8a00); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:900 }
-.logo .x-black{ background:#000; color:#fff; padding:4px 8px; border-radius:6px; font-weight:800 }
-
-/* tip control (desktop) */
+/* Tip */
 .top-tip{
-  display:inline-flex; align-items:center; gap:8px; padding:8px 14px;
-  border-radius:999px; border:1px solid #eee; background:linear-gradient(180deg,#fff,#f7f7f7);
-  box-shadow:0 6px 18px rgba(0,0,0,0.06); color:#012; cursor:pointer; user-select:none;
-  pointer-events:auto; z-index:10010;
+  display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:1px solid #eee;
+  background:linear-gradient(180deg,#fff,#f7f7f7);box-shadow:0 6px 18px rgba(0,0,0,0.06);color:#012;cursor:pointer;
+  user-select:none; pointer-events:auto; touch-action:manipulation;
 }
-.top-tip .apple{ display:inline-flex; align-items:center; justify-content:center; padding:6px; border-radius:8px; font-weight:800; background:linear-gradient(180deg,#92e08a,#3cb371) }
+.top-tip .apple{display:inline-flex;align-items:center;justify-content:center;padding:6px;border-radius:8px;font-weight:800;background:linear-gradient(180deg,#92e08a,#3cb371)}
 
-/* right (letters + pill) */
-.top-actions{ display:flex; gap:8px; align-items:center; margin-left:auto; }
-.top-actions button{ background:var(--glass); border:1px solid var(--outline); padding:8px 12px; border-radius:8px; color:var(--text); cursor:pointer; min-height:40px; pointer-events:auto; z-index:10010;}
+/* actions */
+.top-actions{display:flex;gap:8px;align-items:center;margin-left:auto}
+.top-actions button{background:var(--glass);border:1px solid var(--outline);padding:8px 12px;border-radius:8px;color:var(--text);cursor:pointer;min-height:40px;touch-action:manipulation}
 
 /* layout */
-.app{ display:flex; min-height:calc(100vh - var(--header-h)); }
+.app{display:flex;min-height:calc(100vh - var(--header-h));position:relative;z-index:1}
+.side{width:var(--side-w);background:linear-gradient(180deg,#08090a,#0b0b0b);border-right:1px solid var(--outline);padding:12px;overflow:auto;transition:transform .28s ease;position:relative;z-index:10}
+.side .menu-btn{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
+.side .menu-btn:hover{background:rgba(255,255,255,0.02)}
+.halfpanel[aria-hidden="true"]{display:none}
+.halfpanel[aria-hidden="false"]{display:block;pointer-events:auto;position:fixed;left:0;top:var(--header-h);bottom:0;width:50%;max-width:720px;background:linear-gradient(180deg,#060708,#0b0b0b);border-right:1px solid var(--outline);padding:18px;z-index:10050;box-shadow:6px 0 40px rgba(0,0,0,0.6);overflow:auto}
 
-/* side panel */
-.side{
-  width:var(--side-w);
-  background:linear-gradient(180deg,#08090a,#0b0b0b);
-  border-right:1px solid var(--outline);
-  padding:12px; overflow:auto; transition:transform .28s ease; position:relative; z-index:10;
-}
-.side .menu-btn{ display:flex; align-items:center; gap:8px; padding:10px; border-radius:10px; cursor:pointer; border:1px solid transparent}
-.side .menu-btn:hover{ background:rgba(255,255,255,0.02) }
+/* main */
+.main{flex:1;display:flex;flex-direction:column;position:relative}
+.center-screen{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);z-index:2}
+#centerScreen{pointer-events:auto} /* initially interactive */
+.chat-wrap{display:flex;flex-direction:column;gap:12px;padding:18px;max-width:900px;margin:0 auto;flex:1;overflow:auto}
+.msg{padding:12px 14px;border-radius:12px;max-width:78%;white-space:pre-wrap;opacity:0;transform:translateY(6px);animation:fadeIn 240ms ease forwards}
+@keyframes fadeIn{to{opacity:1;transform:none}}
+.msg.user{background:#071326;margin-left:auto;border-top-right-radius:2px;color:#bfe}
+.msg.ai{background:linear-gradient(180deg,#0f1720,#07101a);margin-right:auto;border-top-left-radius:2px}
+.meta{font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:8px;align-items:center}
 
-/* halfpanel visible/hidden control */
-.halfpanel[aria-hidden="true"]{ display:none; pointer-events:none; }
-.halfpanel[aria-hidden="false"]{ display:block; pointer-events:auto; position:fixed; left:0; top:var(--header-h); bottom:0; width:50%; max-width:720px; background:linear-gradient(180deg,#060708,#0b0b0b); border-right:1px solid var(--outline); padding:18px; z-index:10020; box-shadow:6px 0 40px rgba(0,0,0,0.6); overflow:auto; }
-
-/* main chat */
-.main{ flex:1; display:flex; flex-direction:column; position:relative }
-.center-screen{ flex:1; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--muted) }
-.chat-wrap{ display:flex; flex-direction:column; gap:12px; padding:18px; max-width:900px; margin:0 auto; flex:1; overflow:auto }
-.msg{ padding:12px 14px; border-radius:12px; max-width:78%; white-space:pre-wrap; opacity:0; transform:translateY(6px); animation:fadeIn 240ms ease forwards }
-@keyframes fadeIn{ to{ opacity:1; transform:none } }
-.msg.user{ background:#071326; margin-left:auto; border-top-right-radius:2px; color:#bfe }
-.msg.ai{ background:linear-gradient(180deg,#0f1720,#07101a); margin-right:auto; border-top-left-radius:2px }
-.meta{ font-size:12px; color:var(--muted); margin-top:4px; display:flex; gap:8px; align-items:center }
-
-/* typing indicator */
-.typing{ display:inline-block; margin-left:6px; font-size:12px; color:var(--muted) }
-.cursor{ display:inline-block; width:10px; height:18px; margin-left:6px; background:var(--text); border-radius:2px; animation:blink 1s steps(2,end) infinite }
+/* typing */
+.typing{display:inline-block;margin-left:6px;font-size:12px;color:var(--muted)}
+.cursor{display:inline-block;width:10px;height:18px;margin-left:6px;background:var(--text);border-radius:2px;animation:blink 1s steps(2,end) infinite}
 @keyframes blink{50%{opacity:0}}
 
-/* input bar */
-.compose{ padding:12px; border-top:1px solid var(--outline); display:flex; gap:8px; align-items:center; background:linear-gradient(180deg,#020203,#0b0b0b) }
-.compose textarea{ flex:1; background:transparent; border:1px solid rgba(255,255,255,0.04); padding:12px; border-radius:12px; color:var(--text); min-height:46px; resize:none }
-.compose button{ background:var(--accent); border:none; padding:10px 16px; border-radius:10px; font-weight:700; cursor:pointer; color:#000; pointer-events:auto; z-index:10010 }
+/* compose */
+.compose{padding:12px;border-top:1px solid var(--outline);display:flex;gap:8px;align-items:center;background:linear-gradient(180deg,#020203,#0b0b0b)}
+.compose textarea{flex:1;background:transparent;border:1px solid rgba(255,255,255,0.04);padding:12px;border-radius:12px;color:var(--text);min-height:46px;resize:none}
+.compose button{background:var(--accent);border:none;padding:10px 16px;border-radius:10px;font-weight:700;cursor:pointer;color:#000;touch-action:manipulation}
 
-/* small helpers */
-.hint{ color:var(--muted); font-size:13px; text-align:center; margin-top:8px }
-.mode-pill{ padding:6px 8px; border-radius:999px; background:#0c0c0c; border:1px solid var(--outline); font-size:13px; color:var(--muted) }
+/* helpers & responsive */
+.hint{color:var(--muted);font-size:13px;text-align:center;margin-top:8px}
+.mode-pill{padding:6px 8px;border-radius:999px;background:#0c0c0c;border:1px solid var(--outline);font-size:13px;color:var(--muted)}
 
-/* modals behavior */
-#lettersModal[aria-hidden="true"], #tipModal[aria-hidden="true"], #qrModal[aria-hidden="true"]{
-  display:none; pointer-events:none;
-}
-#lettersModal[aria-hidden="false"], #tipModal[aria-hidden="false"], #qrModal[aria-hidden="false"]{
-  display:block; pointer-events:auto; position:fixed; left:8%; top:12%; right:8%; bottom:12%; background:#061212; border-radius:12px; padding:18px; z-index:10030; overflow:auto; border:1px solid #142;
-}
-
-/* responsive (mobile) */
-@media (max-width:880px){
-  .side{ display:none }
-  .halfpanel[aria-hidden="false"]{ width:86% }
-  .center-screen .bigBtn{ width:100% }
-}
-
-/* mobile header stacking - keep it clean (old look) */
+@media (max-width:880px){.side{display:none}.halfpanel[aria-hidden="false"]{width:86%}.center-screen .bigBtn{width:100%}}
 @media (max-width:520px){
-  header{ height:auto; padding:10px; align-items:center; flex-wrap:nowrap; gap:10px }
-  .header-left{ order:0; width:auto; display:flex; gap:8px; align-items:center }
-  .header-center{ order:1; width:auto; justify-content:flex-start; margin-left:6px }
-  .header-right{ order:2; width:auto; display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-left:auto }
-  .top-tip{ padding:6px 10px; font-size:13px; }
-  .top-tip .apple{ padding:4px; font-size:14px; }
-  .top-actions button{ padding:6px 10px; font-size:13px }
-  /* small mobile-tip - move tip slightly below header to avoid overlap */
-  .mobile-tip{ display:flex; justify-content:flex-start; gap:8px; padding:8px 12px; }
-  .mobile-tip .top-tip{ transform:none; }
+  header{height:auto;padding:10px;align-items:center;flex-wrap:nowrap;gap:10px}
+  .header-left{order:0;width:auto;display:flex;gap:8px;align-items:center}
+  .header-center{order:1;width:auto;justify-content:flex-start;margin-left:6px}
+  .header-right{order:2;width:auto;display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-left:auto}
+  .top-tip{padding:6px 10px;font-size:13px}
+  .top-tip .apple{padding:4px;font-size:14px}
+  .top-actions button{padding:6px 10px;font-size:13px}
+  .mobile-tip{display:flex;justify-content:flex-start;gap:8px;padding:8px 12px}
+  .mobile-tip .top-tip{transform:none}
 }
 
-/* ensure body content never sits over header interactively */
-main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+/* ensure clickable */
+button, .top-tip, .menu-btn { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 
+/* safety: ensure centerScreen doesn't steal touches when hidden */
+#centerScreen[aria-hidden="true"]{ display:none !important; pointer-events:none !important; position:absolute !important; z-index:-1 !important; }
 </style>
 </head>
 <body>
@@ -147,7 +118,6 @@ main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action:
   </div>
 
   <div class="header-center">
-    <!-- Desktop tip sits in header center; mobile will use .mobile-tip shown below -->
     <div class="top-tip" id="topTipBtn" title="Tip ZultX" role="button" aria-pressed="false">
       <span class="apple">🍏</span><strong>Tip</strong>
     </div>
@@ -159,14 +129,13 @@ main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action:
   </div>
 </header>
 
-<!-- mobile-only small row to avoid overlap (keeps old clean feel) -->
+<!-- mobile small tip row -->
 <div class="mobile-tip" style="display:none;padding:6px 12px;">
   <div class="top-tip" id="mobileTip" title="Tip ZultX" role="button" aria-pressed="false" style="padding:6px 10px">
     <span class="apple">🍏</span><strong style="font-weight:700">Tip</strong>
   </div>
 </div>
 
-<!-- half screen panel (opens on hamburger) -->
 <div id="halfPanel" class="halfpanel" role="dialog" aria-hidden="true">
   <button class="closeBtn" onclick="closeHalf()" style="position:absolute;right:12px;top:12px">✕</button>
   <h2 style="margin-top:6px">ZultX — History & Servers</h2>
@@ -179,17 +148,15 @@ main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action:
 </div>
 
 <div class="app">
-  <aside class="side" id="sidePanel" aria-hidden="false">
+  <aside class="side" id="sidePanel">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div style="display:flex;gap:8px;align-items:center"><strong>ZultX</strong><small style="color:var(--muted)"> v1.1</small></div>
       <div style="font-size:12px;color:var(--muted)">Hardik</div>
     </div>
-
     <h3>Your Chats</h3>
     <div id="historyList">
       <div class="menu-btn" onclick="newChat()">+ New chat</div>
     </div>
-
     <h3>Letters</h3>
     <div id="lettersList" style="display:flex;flex-direction:column;gap:6px"></div>
     <div style="height:20px"></div>
@@ -197,11 +164,11 @@ main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action:
   </aside>
 
   <main class="main">
-    <div id="centerScreen" class="center-screen">
+    <div id="centerScreen" class="center-screen" aria-hidden="false">
       <div style="max-width:720px">
         <div style="font-size:28px;font-weight:800;margin-bottom:16px;color:#fff">What can I help with?</div>
         <div style="display:flex;gap:8px;justify-content:center">
-          <button class="bigBtn" onclick="focusInput()" style="padding:12px 18px;border-radius:999px;border:1px solid var(--outline);background:transparent;color:var(--text);cursor:pointer">Ask About Life With ZultX..</button>
+          <button class="bigBtn" id="startBtn" style="padding:12px 18px;border-radius:999px;border:1px solid var(--outline);background:transparent;color:var(--text);cursor:pointer">Ask About Life With ZultX..</button>
         </div>
       </div>
     </div>
@@ -216,7 +183,7 @@ main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action:
 </div>
 
 <!-- letters modal -->
-<div id="lettersModal" aria-hidden="true">
+<div id="lettersModal" aria-hidden="true" style="display:none;position:fixed;left:8%;top:12%;right:8%;bottom:12%;background:#061212;border-radius:12px;padding:18px;z-index:10030;overflow:auto;border:1px solid #142">
   <div style="display:flex;justify-content:space-between;align-items:center">
     <h2>Letters</h2>
     <button onclick="closeLetters()">Close</button>
@@ -225,7 +192,7 @@ main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action:
 </div>
 
 <!-- tip modal -->
-<div id="tipModal" aria-hidden="true">
+<div id="tipModal" aria-hidden="true" style="display:none;position:fixed;left:18%;top:18%;right:18%;background:#061212;border-radius:12px;padding:18px;z-index:10030;border:1px solid #142">
   <h3>Tip ZultX</h3>
   <div style="display:flex;gap:8px;margin-top:12px">
     <button onclick="createTip(10)">₹10</button>
@@ -238,7 +205,7 @@ main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action:
 </div>
 
 <!-- qr modal -->
-<div id="qrModal" aria-hidden="true">
+<div id="qrModal" aria-hidden="true" style="display:none;position:fixed;left:18%;top:12%;right:18%;background:#061212;border-radius:12px;padding:18px;z-index:10030;border:1px solid #142;text-align:center">
   <h3>Scan to pay (UPI)</h3>
   <div id="qrImgWrap" style="margin-top:12px"></div>
   <div style="margin-top:12px">
@@ -248,7 +215,7 @@ main, .app, .chat-wrap { -webkit-tap-highlight-color: transparent; touch-action:
 </div>
 
 <script>
-/* ---------- refs ---------- */
+/* ---------- DOM refs ---------- */
 const chatArea = document.getElementById("chatArea");
 const input = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
@@ -264,38 +231,65 @@ const topTipBtn = document.getElementById("topTipBtn");
 const mobileTipBtn = document.getElementById("mobileTip");
 const lettersBtn = document.getElementById("lettersBtn");
 const hamb = document.getElementById("hamb");
+const startBtn = document.getElementById("startBtn");
 
 let streaming = false;
 let lastAbortController = null;
 
-/* ---------- small helpers ---------- */
+/* ---------- UI helpers (safe removal of overlay) ---------- */
+function killCenterScreenFromLayout(){
+  // Make sure centerScreen cannot block touches or layout EVER after chat started.
+  centerScreen.setAttribute('aria-hidden','true');
+  centerScreen.style.display = 'none';
+  centerScreen.style.pointerEvents = 'none';
+  centerScreen.style.position = 'absolute';
+  centerScreen.style.zIndex = '-1';
+}
+function reviveCenterScreen(){
+  centerScreen.setAttribute('aria-hidden','false');
+  centerScreen.style.display = '';
+  centerScreen.style.pointerEvents = '';
+  centerScreen.style.position = '';
+  centerScreen.style.zIndex = '';
+}
+
+/* initial state: center visible */
+reviveCenterScreen();
+
+/* show chat area (and permanently remove center overlay) */
+function showChatAreaPermanently(){
+  killCenterScreenFromLayout();
+  chatArea.style.display = "flex";
+}
+
+/* misc UI bits */
 function setVisible(el, visible){
   if(!el) return;
   el.setAttribute('aria-hidden', visible ? 'false' : 'true');
-  if(!visible) el.classList.add('hidden'); else el.classList.remove('hidden');
-}
-function focusInput(){
-  // hide center screen and ensure it does not block touches
-  centerScreen.classList.add('hidden');
-  centerScreen.style.pointerEvents = 'none';
-  chatArea.style.display = "flex";
-  input.focus();
+  if(visible){ el.style.display = ""; el.classList.remove('hidden'); }
+  else { el.style.display = "none"; el.classList.add('hidden'); }
 }
 
-function newChat(){
-  chatArea.innerHTML = "";
-  centerScreen.classList.add('hidden');
-  chatArea.style.display = "flex";
+/* click handlers to open panels */
+function openHalf(){ setVisible(halfPanel, true); }
+function closeHalf(){ setVisible(halfPanel, false); }
+hamb.addEventListener('click', ()=>{
+  const hidden = halfPanel.getAttribute('aria-hidden') === 'true';
+  if(hidden) openHalf(); else closeHalf();
+});
+
+startBtn?.addEventListener('click', ()=>{
+  showChatAreaPermanently();
   addSystemMsg("New chat started.");
-}
+});
 
-/* message helpers */
+/* messages */
 function addUserMsg(text){
   const d = document.createElement("div");
   d.className = "msg user";
   d.textContent = text;
   chatArea.appendChild(d);
-  chatArea.scrollTop = chatArea.scrollHeight;
+  scrollToBottom();
   return d;
 }
 function addAiMsg(text){
@@ -303,7 +297,7 @@ function addAiMsg(text){
   d.className = "msg ai";
   d.textContent = text || "";
   chatArea.appendChild(d);
-  chatArea.scrollTop = chatArea.scrollHeight;
+  scrollToBottom();
   return d;
 }
 function addSystemMsg(text){
@@ -313,9 +307,274 @@ function addSystemMsg(text){
   d.style.fontSize = "13px";
   d.textContent = text;
   chatArea.appendChild(d);
-  chatArea.scrollTop = chatArea.scrollHeight;
+  scrollToBottom();
   return d;
 }
+function addFeedbackRow(aiDiv){
+  const row = document.createElement("div");
+  row.className = "meta";
+  row.innerHTML = `
+    <button onclick="vote('up',this)">Thanks 👍</button>
+    <button onclick="vote('down',this)">Sorry 😔</button>
+    <button onclick="generateShare(this)">Share</button>
+  `;
+  aiDiv.after(row);
+}
+
+/* safe scroll */
+function scrollToBottom(){
+  setTimeout(()=> { chatArea.scrollTop = chatArea.scrollHeight; }, 50);
+}
+
+/* ---------- STREAMING PARSER (robust) ---------- */
+/*
+ * This reads server SSE or chunked text and extracts
+ * meaningful "content" fields only (choices.delta.content,
+ * choices.message.content, candidates.parts.text or raw text).
+ *
+ * Uses a streaming reader (fetch with ReadableStream).
+ */
+async function sendMessage(){
+  const text = input.value.trim();
+  if(!text || streaming) return;
+
+  // ensure chat visible and center removed
+  showChatAreaPermanently();
+
+  // UI
+  addUserMsg(text);
+  input.value = "";
+  sendBtn.disabled = true;
+  streaming = true;
+  const aiDiv = addAiMsg(""); // empty bubble where chunks append
+  showTyping(true);
+
+  // Abort guard
+  if(lastAbortController){ try{ lastAbortController.abort(); }catch(_){} }
+  const controller = new AbortController();
+  lastAbortController = controller;
+  const TIMEOUT_START_MS = 20000;
+  const startTimeout = setTimeout(()=> controller.abort(), TIMEOUT_START_MS);
+
+  try {
+    // Adjust endpoint to your server (here /ask?q=...)
+    const res = await fetch(`/ask?q=${encodeURIComponent(text)}&stream=true`, {
+      headers: { "Accept": "text/event-stream, application/json, text/plain" },
+      signal: controller.signal
+    });
+    clearTimeout(startTimeout);
+
+    if(!res.ok){
+      const body = await res.text().catch(()=> "server error");
+      aiDiv.textContent = "⚠️ Server error: " + (body || res.statusText);
+      return;
+    }
+
+    // If server doesn't stream, show whole text
+    if(!res.body){
+      const full = await res.text();
+      const t = extractBestTextFromAny(full);
+      aiDiv.textContent += t;
+      addFeedbackRow(aiDiv);
+      return;
+    }
+
+    // ReadableStream parsing
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    // Helper append
+    function appendToAi(s){
+      if(!s) return;
+      aiDiv.textContent += s;
+      scrollToBottom();
+    }
+
+    // parse loop
+    while(true){
+      const { value, done } = await reader.read();
+      if(done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE events are separated by double newlines. But servers sometimes stream raw JSON chunks.
+      // We'll look for "data:" event blocks first, else try to parse any JSON objects inside buffer.
+
+      // 1) handle data: ... \n\n blocks
+      let idx;
+      while((idx = buffer.indexOf("\n\n")) !== -1){
+        const block = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 2);
+        if(!block) continue;
+
+        // collect only lines starting with data:
+        const lines = block.split(/\r?\n/).map(l => l.trim());
+        const dataLines = lines.filter(l => l.startsWith("data:")).map(l => l.slice(5).trim());
+        if(dataLines.length === 0){
+          // not SSE style; try to process block as JSON or raw text
+          const candidate = block.trim();
+          tryProcessPayload(candidate, appendToAi);
+          continue;
+        }
+
+        // join multi-line data: into a single payload (some servers chunk JSON across multiple data lines)
+        const payload = dataLines.join("\n");
+        tryProcessPayload(payload, appendToAi);
+      } // while have \n\n
+
+      // 2) attempt to find JSON objects inside buffer (fallback)
+      // Find first full JSON object {...}
+      // This helps when server sends raw JSON objects without data: prefix.
+      const jsonMatch = findFirstJson(buffer);
+      if(jsonMatch){
+        tryProcessPayload(jsonMatch.json, appendToAi);
+        buffer = buffer.slice(jsonMatch.end);
+      }
+
+      // Keep buffer trimmed to reasonable size to avoid huge memory
+      if(buffer.length > 20000) buffer = buffer.slice(buffer.length - 20000);
+    } // while read
+
+    // leftover buffer flush
+    if(buffer && buffer.trim()){
+      tryProcessPayload(buffer.trim(), appendToAi);
+    }
+
+    addFeedbackRow(aiDiv);
+
+  } catch(err){
+    if(err.name === 'AbortError'){
+      aiDiv.textContent = "⚠️ No response — server timed out. Try again.";
+    } else {
+      console.error(err);
+      aiDiv.textContent = "⚠️ Connection lost.";
+    }
+  } finally {
+    showTyping(false);
+    sendBtn.disabled = false;
+    streaming = false;
+  }
+}
+
+/* Attempt to process an incoming payload (string).
+   - If it's JSON, parse and extract content fields.
+   - If it's plain text, append sanitized text.
+*/
+function tryProcessPayload(payload, appendFn){
+  if(!payload) return;
+  // ignore sentinel
+  if(payload === "[DONE]") return;
+
+  // If payload looks like JSON, try to parse
+  payload = payload.trim();
+  if(payload.startsWith("{") || payload.startsWith("[")){
+    try{
+      const obj = JSON.parse(payload);
+      // prefer choices[].delta.content
+      const appended = extractTextFromObject(obj);
+      if(appended) appendFn(appended);
+      else {
+        // fallback: stringify small snippet
+        appendFn(JSON.stringify(obj).slice(0,300));
+      }
+      return;
+    }catch(e){
+      // not JSON — fallthrough
+    }
+  }
+
+  // If it's "data: {...}" raw, trim "data:" if present
+  const maybe = payload.replace(/^data:\s*/g, "").trim();
+  if(maybe.startsWith("{")){
+    try { const obj = JSON.parse(maybe); const t = extractTextFromObject(obj); if(t) { appendFn(t); return; } } catch(_) {}
+  }
+
+  // final fallback: plain text — append (but hide long raw JSON-looking strings)
+  // Remove extraneous newlines and repetitive "data:" words
+  const clean = payload.replace(/data:\s*/g, "").replace(/\[DONE\]/g,"").trim();
+  if(clean.length > 0){
+    // If looks like JSON blob (lots of quotes and braces), don't append raw; show truncated
+    const looksLikeJson = (clean.match(/[{}"]/g)||[]).length > 20;
+    appendFn( looksLikeJson ? clean.slice(0,400) + "…" : clean );
+  }
+}
+
+/* Extract human-readable text from parsed streaming object.
+   Supports OpenAI/Mistral style + Gemini-like candidates + generic fields.
+*/
+function extractTextFromObject(obj){
+  if(!obj) return "";
+  // OpenAI/Mistral streaming: choices[].delta.content
+  if(Array.isArray(obj.choices)){
+    let acc = "";
+    for(const ch of obj.choices){
+      if(ch.delta && typeof ch.delta.content === "string"){
+        acc += ch.delta.content;
+      } else if(ch.message && typeof ch.message.content === "string"){
+        acc += ch.message.content;
+      } else if(typeof ch.text === "string"){
+        acc += ch.text;
+      } else if(ch.finish_reason && ch.finish_reason === "stop"){
+        // ignore
+      }
+    }
+    if(acc) return acc;
+  }
+  // Gemini-ish: candidates[0].content.parts[].text
+  if(obj.candidates && obj.candidates[0] && obj.candidates[0].content && Array.isArray(obj.candidates[0].content.parts)){
+    return obj.candidates[0].content.parts.map(p=>p.text||"").join("");
+  }
+  // Common fallback keys
+  if(typeof obj.content === "string") return obj.content;
+  if(typeof obj.text === "string") return obj.text;
+  // If object has usage.content or similar - try to find long string inside
+  const found = walkForString(obj);
+  return found || "";
+}
+function walkForString(o){
+  if(!o) return null;
+  if(typeof o === 'string') return o;
+  if(typeof o === 'object'){
+    for(const k of Object.keys(o)){
+      const v = o[k];
+      if(typeof v === 'string' && v.length > 1) return v;
+      if(typeof v === 'object'){
+        const r = walkForString(v);
+        if(r) return r;
+      }
+    }
+  }
+  return null;
+}
+
+/* Extract best text if server returns a big non-stream chunk (fallback) */
+function extractBestTextFromAny(s){
+  try{
+    const j = JSON.parse(s);
+    return extractTextFromObject(j) || (typeof j === 'string' ? j : JSON.stringify(j).slice(0,800));
+  }catch(e){
+    return s.slice(0,2000);
+  }
+}
+
+/* Find first complete JSON object in a text; returns {json, end} */
+function findFirstJson(s){
+  const start = s.indexOf("{");
+  if(start === -1) return null;
+  let depth = 0;
+  for(let i=start;i<s.length;i++){
+    const ch = s[i];
+    if(ch === "{") depth++;
+    else if(ch === "}") depth--;
+    if(depth === 0){
+      const piece = s.slice(start, i+1);
+      try { JSON.parse(piece); return { json: piece, end: i+1 }; } catch(_) { return null; }
+    }
+  }
+  return null;
+}
+
+/* ---------- utilities: tiny UI & safety ---------- */
 function showTyping(flag){
   let t = document.getElementById("typingIndicator");
   if(flag){
@@ -325,107 +584,31 @@ function showTyping(flag){
       t.className = "meta";
       t.innerHTML = 'ZultX is thinking<span class="cursor"></span>';
       chatArea.appendChild(t);
-      chatArea.scrollTop = chatArea.scrollHeight;
+      scrollToBottom();
     }
   } else {
     const el = document.getElementById("typingIndicator");
     if(el) el.remove();
   }
 }
-function addFeedbackRow(aiDiv, q){
-  const row = document.createElement("div");
-  row.className = "meta";
-  row.innerHTML = `
-    <button onclick="vote('up',this)">✅</button>
-    <button onclick="vote('down',this)">❎</button>
-    <button onclick="generateShare(this)">Share</button>
-  `;
-  aiDiv.after(row);
-}
+function addFeedbackRow(aiDiv, q){ /* left as earlier if needed */ }
 
-/* ---------- streaming sendMessage (robust) ---------- */
-async function sendMessage() {
-  const msg = input.value.trim();
-  if (!msg) return;
-
-  input.value = "";
-  addUserBubble(msg);
-
-  const res = await fetch("/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: msg })
-  });
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder("utf-8");
-
-  let buffer = "";
-  let aiBubble = createAiBubble("");
-  while (true) {
-  const { value, done } = await reader.read();
-  if (done) break;
-
-  buffer += decoder.decode(value, { stream: true });
-
-  // 🔥 Extract ALL data: {...} blocks safely
-  const regex = /data:\s*(\{[\s\S]*?\})(?=data:|\[DONE\]|$)/g;
-  let match;
-
-  while ((match = regex.exec(buffer)) !== null) {
-    const payload = match[1];
-
-    let obj;
-    try {
-      obj = JSON.parse(payload);
-    } catch {
-      continue; // ignore broken chunk
-    }
-
-    // ✅ OpenAI / Mistral
-    const delta = obj.choices?.[0]?.delta?.content;
-    if (delta) {
-      aiBubble.textContent += delta;
-      scrollToBottom();
-    }
-
-    // ✅ Gemini
-    const parts = obj.candidates?.[0]?.content?.parts;
-    if (parts) {
-      for (const p of parts) {
-        if (p.text) {
-          aiBubble.textContent += p.text;
-          scrollToBottom();
-        }
-      }
-    }
-  }
-
-  // 🧹 trim processed buffer (prevents memory leak)
-  buffer = buffer.slice(Math.max(buffer.lastIndexOf("data:"), 0));
-  } 
-
-/* ---------- utils ---------- */
-function addToAiSafe(t){
-  if(!t) return;
-  const last = document.querySelector(".msg.ai:last-of-type");
-  if(last) last.textContent += t;
-  chatArea.scrollTop = chatArea.scrollHeight;
-}
-sendBtn.onclick = sendMessage;
-input.addEventListener("keydown", e=>{
+/* ---------- small helpers (buttons, letters, tips, modals) ---------- */
+sendBtn.addEventListener('click', sendMessage);
+input.addEventListener('keydown', e=>{
   if(e.key === "Enter" && !e.shiftKey){
     e.preventDefault();
     sendMessage();
   }
 });
+
 async function vote(kind,btn){
   const payload = {type: kind, time: Date.now()};
   try{ await fetch("/feedback", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)}); }catch(_){}
   btn.textContent = kind === 'up' ? 'Thanks 👍' : 'Sorry 😔';
 }
 
-/* share generator */
+/* share */
 function generateShare(btn){
   const msg = (btn.parentNode.previousSibling && btn.parentNode.previousSibling.textContent) || "";
   const canvas = document.createElement("canvas");
@@ -436,11 +619,7 @@ function generateShare(btn){
   ctx.fillStyle = "#cfe"; ctx.font = "28px Inter, Arial";
   const lines = wrapText(ctx, msg, 1120);
   let y = 160;
-  for(const line of lines){
-    ctx.fillText(line, 40, y);
-    y += 42;
-    if(y > 560) break;
-  }
+  for(const line of lines){ ctx.fillText(line, 40, y); y += 42; if(y > 560) break; }
   const data = canvas.toDataURL("image/png");
   const link = document.createElement("a"); link.href = data; link.download = "zultx-share.png"; link.click();
 }
@@ -456,7 +635,7 @@ function wrapText(ctx, text, maxWidth){
   return lines;
 }
 
-/* ---------- letters loading & modals ---------- */
+/* letters */
 async function loadLetters(){
   try{
     const res = await fetch("/letters");
@@ -468,7 +647,7 @@ async function loadLetters(){
       const el = document.createElement("div");
       el.className = "menu-btn";
       el.textContent = name;
-      el.onclick = ()=>openLetter(name);
+      el.onclick = ()=> openLetter(name);
       list.appendChild(el);
     });
   }catch(e){ console.warn("letters load failed", e); }
@@ -484,13 +663,12 @@ async function openLetter(name){
 }
 function closeLetters(){ setVisible(lettersModal, false) }
 
-/* tip handling */
+/* tip modal */
 function openTip(){ setVisible(tipModal, true); }
 function closeTip(){ setVisible(tipModal, false); }
 topTipBtn?.addEventListener('click', openTip);
 mobileTipBtn?.addEventListener('click', openTip);
 
-/* UPI tip creation */
 async function createTip(amount){
   try{
     const res = await fetch("/tip", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({amount})});
@@ -500,7 +678,6 @@ async function createTip(amount){
     const qr = data.qr;
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if(isMobile){
-      // open UPI intent
       window.location.href = upi_link;
       closeTip();
       setTimeout(()=> {
@@ -525,17 +702,8 @@ function openQr(qrUrl, upiLink){
 }
 function closeQr(){ setVisible(qrModal, false) }
 
-/* ---------- halfpanel toggles ---------- */
-function openHalf(){ setVisible(halfPanel, true); }
-function closeHalf(){ setVisible(halfPanel, false); }
-hamb.onclick = ()=>{
-  const hidden = halfPanel.getAttribute('aria-hidden') === 'true';
-  if(hidden) openHalf(); else closeHalf();
-};
-
-/* close modals when clicking outside (nice UX) */
+/* close modals when clicking outside */
 document.addEventListener('click', (e)=>{
-  // if open and click outside modals, close them (simple)
   [lettersModal, tipModal, qrModal].forEach(mod => {
     if(!mod) return;
     if(mod.getAttribute('aria-hidden') === 'false' && !mod.contains(e.target) && !e.target.closest('#lettersBtn') && !e.target.closest('#topTipBtn')){
@@ -544,12 +712,11 @@ document.addEventListener('click', (e)=>{
   });
 });
 
-/* init UI: show mobile-tip only on mobile, load letters */
+/* adapt mobile tip row & ensure centerScreen not blocking */
 function adaptMobileTip(){
   const mobileRow = document.querySelector('.mobile-tip');
   if(window.innerWidth <= 520){
     mobileRow.style.display = 'flex';
-    // hide header-center to avoid duplicate tip
     document.querySelector('.header-center').style.display = 'none';
   } else {
     mobileRow.style.display = 'none';
@@ -560,13 +727,11 @@ window.addEventListener('resize', adaptMobileTip);
 adaptMobileTip();
 loadLetters();
 
-/* small safety: ensure centerScreen is non-blocking initially */
-centerScreen.classList.remove('hidden'); // show default
+/* initial state */
 setVisible(lettersModal, false);
 setVisible(tipModal, false);
 setVisible(qrModal, false);
 setVisible(halfPanel, false);
-
 </script>
 </body>
 </html>
