@@ -135,7 +135,7 @@ const qrImgWrap = document.getElementById("qrImgWrap");
 const closeQrBtn = document.getElementById("closeQrBtn");
 const copyUpiBtn = document.getElementById("copyUpiBtn");
 
-let currentConversationId = null; // string id for current chat
+let currentConversationId = null;
 let streaming = false;
 let lastAbort = null;
 
@@ -231,44 +231,29 @@ function showTyping(flag){
   }
 }
 
-/* ----------------- Robust SSE / chunk parser ----------------- */
-function processSsePayload(payload, aiDiv){
-  // payload is expected JSON string
-  if(!payload) return;
-  payload = payload.trim();
-  if(payload === '[DONE]') return;
-  let obj = null;
-  try { obj = JSON.parse(payload); } catch(e){ 
-    // if not JSON, append raw
-    aiDiv.textContent += payload;
-    chatArea.scrollTop = chatArea.scrollHeight;
-    return;
-  }
-  // OpenAI/Mistral style
+/* Extract text from parsed streaming object */
+function extractTextFromObj(obj){
+  if(!obj) return "";
+  // OpenAI/Mistral streaming: choices[].delta.content
   if(Array.isArray(obj.choices)){
+    let acc = "";
     for(const ch of obj.choices){
-      if(ch.delta && typeof ch.delta.content === 'string'){
-        aiDiv.textContent += ch.delta.content;
-      } else if(ch.message && typeof ch.message.content === 'string'){
-        aiDiv.textContent += ch.message.content;
-      } else if(typeof ch.text === 'string'){
-        aiDiv.textContent += ch.text;
+      if(ch.delta && typeof ch.delta.content === "string"){
+        acc += ch.delta.content;
+      } else if(ch.message && typeof ch.message.content === "string"){
+        acc += ch.message.content;
+      } else if(typeof ch.text === "string"){
+        acc += ch.text;
       }
     }
-    chatArea.scrollTop = chatArea.scrollHeight;
-    return;
+    if(acc) return acc;
   }
   // Gemini-like
   if(obj.candidates && obj.candidates[0] && obj.candidates[0].content && Array.isArray(obj.candidates[0].content.parts)){
-    for(const p of obj.candidates[0].content.parts){
-      if(p.text) aiDiv.textContent += p.text;
-    }
-    chatArea.scrollTop = chatArea.scrollHeight;
-    return;
+    return obj.candidates[0].content.parts.map(p=>p.text||"").join("");
   }
-  // fallback: find string within object
-  const found = walkForString(obj);
-  if(found) { aiDiv.textContent += found; chatArea.scrollTop = chatArea.scrollHeight; return; }
+  // fallback walk
+  return walkForString(obj) || "";
 }
 function walkForString(o){
   if(!o) return null;
@@ -276,7 +261,7 @@ function walkForString(o){
   if(typeof o === 'object'){
     for(const k of Object.keys(o)){
       const v = o[k];
-      if(typeof v === 'string' && v.length>1) return v;
+      if(typeof v === 'string' && v.length > 1) return v;
       if(typeof v === 'object'){
         const r = walkForString(v);
         if(r) return r;
@@ -286,11 +271,12 @@ function walkForString(o){
   return null;
 }
 
-/* ----------------- Send message (NO dead buttons) ----------------- */
+/* ----------------- Send message (robust SSE parse) ----------------- */
 async function sendMessage(){
   const text = input.value.trim();
   if(!text || streaming) return;
-  // ensure chat visible and center removed permanently
+
+  // show chat UI
   centerScreen.style.display = 'none';
   chatArea.style.display = 'flex';
 
@@ -299,13 +285,12 @@ async function sendMessage(){
   sendBtn.disabled = true; streaming = true;
   showTyping(true);
 
-  // create AI bubble to append text into
+  // create AI bubble for streaming text
   const aiDiv = addBubble('ai', '');
 
-  // abort logic
+  // abort previous request
   if(lastAbort){
-    try{ lastAbort.abort(); }catch(_){} 
-    lastAbort = null;
+    try{ lastAbort.abort(); }catch(_){} lastAbort = null;
   }
   const controller = new AbortController();
   lastAbort = controller;
@@ -313,27 +298,28 @@ async function sendMessage(){
   try{
     const url = `/ask?q=${encodeURIComponent(text)}&stream=true`;
     const res = await fetch(url, { headers: { Accept: 'text/event-stream, application/json, text/plain' }, signal: controller.signal });
+
     if(!res.ok){
       aiDiv.textContent = '⚠️ Server error';
       saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
       return;
     }
 
+    // If no streaming body, read full text
     if(!res.body){
-      // fallback: server returned non-stream text (json or plain)
       const txt = await res.text();
-      try {
+      try{
         const j = JSON.parse(txt);
         const ans = j.answer || txt;
         aiDiv.textContent += ans;
-      } catch {
+      }catch(e){
         aiDiv.textContent += txt;
       }
       saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
       return;
     }
 
-    // streaming reader
+    // ReadableStream reader
     const reader = res.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
@@ -350,53 +336,53 @@ async function sendMessage(){
         buffer = buffer.slice(idx + 2);
 
         if(!block) continue;
-        // pick data: lines
+
+        // collect lines starting with "data:"
         const lines = block.split(/\r?\n/).map(s => s.trim());
         const dataLines = lines.filter(l => l.startsWith('data:')).map(l => l.slice(5).trim());
-        if(dataLines.length > 0){
-          const payload = dataLines.join("\n");
-          if(payload === '[DONE]') {
-            // finalize
-            saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
-            continue;
+        const payload = dataLines.length ? dataLines.join("\n") : block;
+
+        if(!payload) continue;
+        if(payload === '[DONE]') {
+          // done signal
+          saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
+          continue;
+        }
+
+        // Try parse JSON payload and extract human text
+        try{
+          const obj = JSON.parse(payload);
+          const add = extractTextFromObj(obj);
+          if(add) {
+            aiDiv.textContent += add;
+            chatArea.scrollTop = chatArea.scrollHeight;
           }
-          processSsePayload(payload, aiDiv);
-        } else {
-          // if block didn't start with data: maybe raw chunk or JSON
-          processSsePayload(block, aiDiv);
+        }catch(e){
+          // not JSON — append raw (but safe small)
+          const safe = payload.replace(/^data:\s*/g, '').slice(0, 2000);
+          aiDiv.textContent += safe;
+          chatArea.scrollTop = chatArea.scrollHeight;
         }
       }
 
-      // if buffer grows too large, attempt to extract first full JSON to avoid memory issues
-      if(buffer.length > 20000){
-        const start = buffer.indexOf('{');
-        if(start !== -1){
-          // try find matching }
-          let depth = 0, end = -1;
-          for(let i=start;i<buffer.length;i++){
-            if(buffer[i] === '{') depth++;
-            else if(buffer[i] === '}'){ depth--; if(depth===0){ end = i; break; } }
-          }
-          if(end !== -1){
-            const piece = buffer.slice(start, end+1);
-            processSsePayload(piece, aiDiv);
-            buffer = buffer.slice(end+1);
-          } else {
-            buffer = buffer.slice(-20000);
-          }
-        } else {
-          buffer = buffer.slice(-20000);
-        }
-      }
-    } // end read loop
-
-    // any leftover
-    if(buffer && buffer.trim()){
-      const cleaned = buffer.replace(/^data:\s*/g, '').trim();
-      if(cleaned && cleaned !== '[DONE]') processSsePayload(cleaned, aiDiv);
+      // if buffer very large, trim it
+      if(buffer.length > 20000) buffer = buffer.slice(-20000);
     }
 
-    // final save
+    // leftover flush
+    if(buffer && buffer.trim()){
+      const cleaned = buffer.replace(/^data:\s*/g, '').trim();
+      if(cleaned && cleaned !== '[DONE]'){
+        try{
+          const obj = JSON.parse(cleaned);
+          aiDiv.textContent += extractTextFromObj(obj) || cleaned;
+        }catch(e){
+          aiDiv.textContent += cleaned;
+        }
+      }
+    }
+
+    // save final ai text
     saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
 
   } catch(err){
@@ -436,7 +422,6 @@ lettersBtn.addEventListener('click', async ()=>{
     if(!res.ok) return alert('No letters');
     const data = await res.json();
     if((data.letters||[]).length===0) return modalLettersContent.textContent = 'No letters found';
-    // show first letter by default
     const name = data.letters[0];
     const r = await fetch('/letters/' + encodeURIComponent(name));
     const text = await r.text();
@@ -454,7 +439,6 @@ async function createTip(amount){
     const res = await fetch('/tip', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({amount}) });
     const data = await res.json();
     if(!data.ok) return alert('Tip failed');
-    // show QR or open UPI
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     if(isMobile){
       window.location.href = data.upi_link;
@@ -480,4 +464,4 @@ if(localStorage.getItem('zultx_history')===null) {
 }
 </script>
 </body>
-    </html>
+  </html>
