@@ -6,23 +6,19 @@
 <title>ZultX — v1.1</title>
 <style>
 :root{
-  --bg:#0b0b0f;--panel:#0f1113;--muted:#9aa0a6;--text:#e8eaed;--accent:#18d018;
-  --outline:#1a1a1a;--glass: rgba(255,255,255,0.03);--side-w:320px;--header-h:72px;
+  --bg:#0b0b0f;--muted:#9aa0a6;--text:#e8eaed;--accent:#18d018;--outline:#1a1a1a;
+  --side-w:320px;--header-h:72px;
 }
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
-.hidden{display:none !important;pointer-events:none !important}
-header{position:sticky;top:0;z-index:100000;height:var(--header-h);display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fff;color:#050505;border-bottom:1px solid var(--outline);box-shadow:0 6px 18px rgba(0,0,0,0.12)}
-.header-left,.header-center,.header-right{display:flex;align-items:center;gap:10px}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:var(--text);background:var(--bg)}
+header{position:sticky;top:0;height:var(--header-h);display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fff;color:#050505;border-bottom:1px solid var(--outline)}
 .logo{font-weight:900;display:flex;align-items:center;gap:8px}
 .logo .fire{background:linear-gradient(90deg,#ff3b3b,#ff8a00);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900}
 .logo .x-black{background:#000;color:#fff;padding:4px 8px;border-radius:6px}
 .top-tip{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:linear-gradient(#fff,#f7f7f7);cursor:pointer}
-.top-actions{display:flex;gap:8px;align-items:center;margin-left:auto}
-.top-actions button{background:var(--glass);border:1px solid var(--outline);padding:8px 12px;border-radius:8px;color:var(--text);cursor:pointer}
 .app{display:flex;min-height:100vh;position:relative}
 .side{width:var(--side-w);background:linear-gradient(180deg,#08090a,#0b0b0b);border-right:1px solid var(--outline);padding:12px;overflow:auto}
-.side .menu-btn{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;cursor:pointer}
+.menu-btn{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;cursor:pointer}
 .main{flex:1;display:flex;flex-direction:column;position:relative}
 .center-screen{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .chat-wrap{display:flex;flex-direction:column;gap:12px;padding:18px;max-width:900px;margin:0 auto;flex:1;overflow:auto}
@@ -35,46 +31,42 @@ header{position:sticky;top:0;z-index:100000;height:var(--header-h);display:flex;
 .hint{color:var(--muted);font-size:13px;text-align:center;margin-top:8px}
 .history-item{padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.02);cursor:pointer;margin-bottom:8px}
 .small-muted{font-size:12px;color:var(--muted)}
-/* mobile */
+.modal{display:none;position:fixed;left:8%;top:12%;right:8%;bottom:12%;background:#061212;border-radius:12px;padding:18px;z-index:10030;overflow:auto;border:1px solid #142}
 @media (max-width:880px){ .side{display:none} }
 </style>
 </head>
 <body>
 <header>
-  <div class="header-left">
-    <button id="hamb" aria-label="menu" style="background:transparent;border:0;font-size:20px;cursor:pointer">≡</button>
+  <div style="display:flex;gap:10px;align-items:center">
     <div class="logo"><span class="fire">Zult</span><span class="x-black">X</span></div>
   </div>
-  <div class="header-center">
-    <div class="top-tip" id="topTipBtn"><span class="apple">🍏</span><strong>Tip</strong></div>
-  </div>
-  <div class="header-right top-actions">
-    <button id="lettersBtn">✉️ Letters</button>
-    <div id="modePill" class="small-muted">Mode: Friendly</div>
+  <div class="top-tip" id="topTipBtn"><span>🍏</span><strong> Tip</strong></div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <button id="lettersBtn" style="background:transparent;border:0;cursor:pointer">✉️ Letters</button>
+    <div class="small-muted">Mode: Friendly</div>
   </div>
 </header>
 
 <div class="app">
-  <aside class="side" id="sidePanel">
+  <aside class="side">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div><strong>ZultX</strong><small class="small-muted"> v1.1</small></div>
       <div class="small-muted">Hardik</div>
     </div>
+
     <h3>Your Chats</h3>
     <div id="historyList"></div>
     <div style="height:12px"></div>
     <div class="menu-btn" id="newChatBtn">+ New chat</div>
     <div style="height:20px"></div>
-    <div class="hint">Tap history to open. Local-only lite history (saved in browser).</div>
+    <div class="hint">Local-only lite history (saved in browser)</div>
   </aside>
 
   <main class="main">
-    <div id="centerScreen" class="center-screen" aria-hidden="false">
-      <div style="max-width:720px;text-align:center">
+    <div id="centerScreen" class="center-screen">
+      <div style="text-align:center;max-width:720px">
         <div style="font-size:28px;font-weight:800;margin-bottom:16px;color:#fff">What can I help with?</div>
-        <div style="display:flex;gap:8px;justify-content:center">
-          <button id="startBtn" style="padding:12px 18px;border-radius:999px;border:1px solid var(--outline);background:transparent;color:var(--text);cursor:pointer">Ask About Life With ZultX..</button>
-        </div>
+        <button id="startBtn" style="padding:12px 18px;border-radius:999px;border:1px solid var(--outline);background:transparent;color:var(--text);cursor:pointer">Ask About Life With ZultX..</button>
       </div>
     </div>
 
@@ -87,14 +79,17 @@ header{position:sticky;top:0;z-index:100000;height:var(--header-h);display:flex;
   </main>
 </div>
 
-<!-- letters modal -->
-<div id="lettersModal" style="display:none;position:fixed;left:8%;top:12%;right:8%;bottom:12%;background:#061212;border-radius:12px;padding:18px;z-index:10030;overflow:auto;border:1px solid #142">
-  <div style="display:flex;justify-content:space-between;align-items:center"><h2>Letters</h2><button id="closeLettersBtn">Close</button></div>
-  <div id="modalLettersContent" style="white-space:pre-wrap;color:var(--text);margin-top:12px"></div>
+<!-- Letters modal -->
+<div id="lettersModal" class="modal">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2>Letters</h2>
+    <button id="closeLettersBtn">Close</button>
+  </div>
+  <pre id="modalLettersContent" style="white-space:pre-wrap;color:var(--text);margin-top:12px"></pre>
 </div>
 
-<!-- tip modal -->
-<div id="tipModal" style="display:none;position:fixed;left:18%;top:18%;right:18%;background:#061212;border-radius:12px;padding:18px;z-index:10030;border:1px solid #142">
+<!-- Tip modal -->
+<div id="tipModal" class="modal" style="width:420px;left:calc(50% - 210px);right:auto">
   <h3>Tip ZultX</h3>
   <div style="display:flex;gap:8px;margin-top:12px">
     <button onclick="createTip(10)">₹10</button>
@@ -105,8 +100,8 @@ header{position:sticky;top:0;z-index:100000;height:var(--header-h);display:flex;
   <div style="margin-top:12px"><button id="closeTipBtn">Cancel</button></div>
 </div>
 
-<!-- qr modal -->
-<div id="qrModal" style="display:none;position:fixed;left:18%;top:12%;right:18%;background:#061212;border-radius:12px;padding:18px;z-index:10030;border:1px solid #142;text-align:center">
+<!-- QR modal -->
+<div id="qrModal" class="modal" style="width:420px;left:calc(50% - 210px);right:auto;text-align:center">
   <h3>Scan to pay (UPI)</h3>
   <div id="qrImgWrap" style="margin-top:12px"></div>
   <div style="margin-top:12px"><button id="copyUpiBtn">Copy UPI</button><button id="closeQrBtn">Close</button></div>
@@ -136,25 +131,12 @@ const closeQrBtn = document.getElementById("closeQrBtn");
 const copyUpiBtn = document.getElementById("copyUpiBtn");
 
 let currentConversationId = null;
-let streaming = false;
-let lastAbort = null;
 
-/* ----------------- HISTORY (localStorage) ----------------- */
+/* ----------------- HISTORY ----------------- */
 function makeConvoId(){ return 'convo_' + Date.now(); }
-function saveMessageToHistory(convoId, role, text){
+function refreshHistoryList(){
   const key = 'zultx_history';
   const all = JSON.parse(localStorage.getItem(key) || '{}');
-  all[convoId] = all[convoId] || { id: convoId, created: Date.now(), messages: [] };
-  all[convoId].messages.push({role, text, t: Date.now()});
-  localStorage.setItem(key, JSON.stringify(all));
-  refreshHistoryList();
-}
-function loadConversation(convoId){
-  const all = JSON.parse(localStorage.getItem('zultx_history') || '{}');
-  return all[convoId] || null;
-}
-function refreshHistoryList(){
-  const all = JSON.parse(localStorage.getItem('zultx_history') || '{}');
   const keys = Object.keys(all).sort((a,b)=> all[b].created - all[a].created);
   historyList.innerHTML = '';
   for(const k of keys){
@@ -167,41 +149,23 @@ function refreshHistoryList(){
     historyList.appendChild(el);
   }
 }
-function openConversation(convoId){
-  currentConversationId = convoId;
-  const convo = loadConversation(convoId);
-  chatArea.innerHTML = '';
-  centerScreen.style.display = 'none';
-  chatArea.style.display = 'flex';
-  if(convo && convo.messages){
-    for(const m of convo.messages){
-      addBubble(m.role === 'user' ? 'user' : 'ai', m.text);
-    }
-  }
-}
-
-/* new chat */
-newChatBtn.addEventListener('click', ()=>{
-  currentConversationId = makeConvoId();
-  localSaveInit(currentConversationId);
-  chatArea.innerHTML = '';
-  centerScreen.style.display = 'none';
-  chatArea.style.display = 'flex';
-  addSystemMsg("New chat started.");
+function saveMessageToHistory(convoId, role, text){
+  const key = 'zultx_history';
+  const all = JSON.parse(localStorage.getItem(key) || '{}');
+  all[convoId] = all[convoId] || { id: convoId, created: Date.now(), messages: [] };
+  all[convoId].messages.push({ role, text, t: Date.now() });
+  localStorage.setItem(key, JSON.stringify(all));
   refreshHistoryList();
-});
+}
+function loadConversation(convoId){
+  const all = JSON.parse(localStorage.getItem('zultx_history') || '{}');
+  return all[convoId] || null;
+}
 function localSaveInit(convoId){
   const all = JSON.parse(localStorage.getItem('zultx_history') || '{}');
   if(!all[convoId]) all[convoId] = { id: convoId, created: Date.now(), messages: [] };
   localStorage.setItem('zultx_history', JSON.stringify(all));
 }
-
-/* auto-create on start */
-if(!currentConversationId){
-  currentConversationId = makeConvoId();
-  localSaveInit(currentConversationId);
-}
-refreshHistoryList();
 
 /* ----------------- UI helpers ----------------- */
 function addBubble(kind, text){
@@ -218,221 +182,107 @@ function addSystemMsg(text){
   const d = document.createElement('div'); d.style.textAlign='center'; d.style.color='#9aa0a6'; d.textContent = text; chatArea.appendChild(d); chatArea.scrollTop = chatArea.scrollHeight;
 }
 
-/* tiny typing placeholder */
-function showTyping(flag){
-  let t = document.getElementById('typingIndicator');
-  if(flag){
-    if(!t){
-      t = document.createElement('div'); t.id='typingIndicator'; t.className='small-muted'; t.textContent = 'ZultX is thinking...';
-      chatArea.appendChild(t); chatArea.scrollTop = chatArea.scrollHeight;
-    }
-  } else {
-    const el = document.getElementById('typingIndicator'); if(el) el.remove();
-  }
-}
-
-/* Extract text from parsed streaming object */
-function extractTextFromObj(obj){
-  if(!obj) return "";
-  // OpenAI/Mistral streaming: choices[].delta.content
-  if(Array.isArray(obj.choices)){
-    let acc = "";
-    for(const ch of obj.choices){
-      if(ch.delta && typeof ch.delta.content === "string"){
-        acc += ch.delta.content;
-      } else if(ch.message && typeof ch.message.content === "string"){
-        acc += ch.message.content;
-      } else if(typeof ch.text === "string"){
-        acc += ch.text;
-      }
-    }
-    if(acc) return acc;
-  }
-  // Gemini-like
-  if(obj.candidates && obj.candidates[0] && obj.candidates[0].content && Array.isArray(obj.candidates[0].content.parts)){
-    return obj.candidates[0].content.parts.map(p=>p.text||"").join("");
-  }
-  // fallback walk
-  return walkForString(obj) || "";
-}
-function walkForString(o){
-  if(!o) return null;
-  if(typeof o === 'string') return o;
-  if(typeof o === 'object'){
-    for(const k of Object.keys(o)){
-      const v = o[k];
-      if(typeof v === 'string' && v.length > 1) return v;
-      if(typeof v === 'object'){
-        const r = walkForString(v);
-        if(r) return r;
-      }
-    }
-  }
-  return null;
-}
-
-/* ----------------- Send message (robust SSE parse) ----------------- */
+/* ----------------- Send message (NO STREAM) ----------------- */
 async function sendMessage(){
   const text = input.value.trim();
-  if(!text || streaming) return;
+  if(!text) return;
 
-  // show chat UI
+  // ensure chat visible
   centerScreen.style.display = 'none';
   chatArea.style.display = 'flex';
 
   addUserMsg(text);
   input.value = '';
-  sendBtn.disabled = true; streaming = true;
-  showTyping(true);
+  sendBtn.disabled = true;
 
-  // create AI bubble for streaming text
-  const aiDiv = addBubble('ai', '');
-
-  // abort previous request
-  if(lastAbort){
-    try{ lastAbort.abort(); }catch(_){} lastAbort = null;
-  }
-  const controller = new AbortController();
-  lastAbort = controller;
+  // insert temporary AI bubble
+  const aiDiv = addBubble('ai', 'ZultX is thinking...');
 
   try{
-    const url = `/ask?q=${encodeURIComponent(text)}&stream=true`;
-    const res = await fetch(url, { headers: { Accept: 'text/event-stream, application/json, text/plain' }, signal: controller.signal });
+    // call non-stream endpoint; always returns JSON { answer: "..." }
+    const res = await fetch(`/ask?q=${encodeURIComponent(text)}`, {
+      headers: { "Accept": "application/json" },
+      method: "GET"
+    });
 
     if(!res.ok){
-      aiDiv.textContent = '⚠️ Server error';
+      aiDiv.textContent = "⚠️ Server error";
       saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
       return;
     }
 
-    // If no streaming body, read full text
-    if(!res.body){
-      const txt = await res.text();
-      try{
-        const j = JSON.parse(txt);
-        const ans = j.answer || txt;
-        aiDiv.textContent += ans;
-      }catch(e){
-        aiDiv.textContent += txt;
-      }
-      saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
-      return;
-    }
-
-    // ReadableStream reader
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while(true){
-      const { value, done } = await reader.read();
-      if(done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // parse SSE blocks separated by \n\n
-      let idx;
-      while((idx = buffer.indexOf("\n\n")) !== -1){
-        const block = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 2);
-
-        if(!block) continue;
-
-        // collect lines starting with "data:"
-        const lines = block.split(/\r?\n/).map(s => s.trim());
-        const dataLines = lines.filter(l => l.startsWith('data:')).map(l => l.slice(5).trim());
-        const payload = dataLines.length ? dataLines.join("\n") : block;
-
-        if(!payload) continue;
-        if(payload === '[DONE]') {
-          // done signal
-          saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
-          continue;
-        }
-
-        // Try parse JSON payload and extract human text
-        try{
-          const obj = JSON.parse(payload);
-          const add = extractTextFromObj(obj);
-          if(add) {
-            aiDiv.textContent += add;
-            chatArea.scrollTop = chatArea.scrollHeight;
-          }
-        }catch(e){
-          // not JSON — append raw (but safe small)
-          const safe = payload.replace(/^data:\s*/g, '').slice(0, 2000);
-          aiDiv.textContent += safe;
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }
-
-      // if buffer very large, trim it
-      if(buffer.length > 20000) buffer = buffer.slice(-20000);
-    }
-
-    // leftover flush
-    if(buffer && buffer.trim()){
-      const cleaned = buffer.replace(/^data:\s*/g, '').trim();
-      if(cleaned && cleaned !== '[DONE]'){
-        try{
-          const obj = JSON.parse(cleaned);
-          aiDiv.textContent += extractTextFromObj(obj) || cleaned;
-        }catch(e){
-          aiDiv.textContent += cleaned;
-        }
-      }
-    }
-
-    // save final ai text
-    saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
+    const data = await res.json();
+    const ans = (data && data.answer) ? data.answer : "⚠️ No answer returned.";
+    aiDiv.textContent = ans;
+    // already saved ai bubble in addBubble? We used addBubble earlier and saved. But ensure history saved:
+    // replace last saved AI (addBubble already saved via addAiMsg?) - we used addBubble directly, so save now:
+    saveMessageToHistory(currentConversationId, 'ai', ans);
 
   } catch(err){
-    if(err.name === 'AbortError'){
-      aiDiv.textContent = '⚠️ Request cancelled.';
-      saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
-    } else {
-      console.error(err);
-      aiDiv.textContent = '⚠️ Connection lost.';
-      saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
-    }
+    console.error(err);
+    aiDiv.textContent = "⚠️ Connection failed.";
+    saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
   } finally {
-    showTyping(false);
     sendBtn.disabled = false;
-    streaming = false;
-    lastAbort = null;
     refreshHistoryList();
   }
 }
 
 /* ----- bindings ----- */
 sendBtn.addEventListener('click', sendMessage);
-input.addEventListener('keydown', e=>{
-  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
-});
-startBtn.addEventListener('click', ()=>{
+input.addEventListener('keydown', e => { if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } });
+
+startBtn.addEventListener('click', () => {
+  currentConversationId = makeConvoId();
+  localSaveInit(currentConversationId);
+  chatArea.innerHTML = '';
   centerScreen.style.display = 'none';
   chatArea.style.display = 'flex';
   addSystemMsg('New chat started.');
+  refreshHistoryList();
 });
-newChatBtn.addEventListener('click', ()=>{ currentConversationId = makeConvoId(); localSaveInit(currentConversationId); refreshHistoryList(); openConversation(currentConversationId); });
 
-/* ----------------- Letters & Tips UI ----------------- */
+newChatBtn.addEventListener('click', () => {
+  currentConversationId = makeConvoId();
+  localSaveInit(currentConversationId);
+  chatArea.innerHTML = '';
+  centerScreen.style.display = 'none';
+  chatArea.style.display = 'flex';
+  addSystemMsg('New chat started.');
+  refreshHistoryList();
+});
+
+function openConversation(convoId){
+  currentConversationId = convoId;
+  const convo = loadConversation(convoId);
+  chatArea.innerHTML = '';
+  centerScreen.style.display = 'none';
+  chatArea.style.display = 'flex';
+  if(convo && convo.messages){
+    for(const m of convo.messages){
+      addBubble(m.role === 'user' ? 'user' : 'ai', m.text);
+    }
+  }
+}
+
+/* ----------------- Letters / Tips UI ----------------- */
 lettersBtn.addEventListener('click', async ()=>{
   try{
     const res = await fetch('/letters');
     if(!res.ok) return alert('No letters');
     const data = await res.json();
-    if((data.letters||[]).length===0) return modalLettersContent.textContent = 'No letters found';
-    const name = data.letters[0];
-    const r = await fetch('/letters/' + encodeURIComponent(name));
-    const text = await r.text();
+    const name = (data.letters && data.letters.length) ? data.letters[0] : null;
+    if(!name) { modalLettersContent.textContent = 'No letters found'; lettersModal.style.display='block'; return; }
+    const r2 = await fetch('/letters/' + encodeURIComponent(name));
+    const text = await r2.text();
     modalLettersContent.textContent = text;
     lettersModal.style.display = 'block';
   }catch(e){ alert('Unable to load letters'); }
 });
 closeLettersBtn.addEventListener('click', ()=> lettersModal.style.display='none');
 
-topTipBtn.addEventListener('click', ()=> tipModal.style.display = 'block');
-closeTipBtn.addEventListener('click', ()=> tipModal.style.display = 'none');
+topTipBtn.addEventListener('click', ()=> tipModal.style.display='block');
+closeTipBtn.addEventListener('click', ()=> tipModal.style.display='none');
 
 async function createTip(amount){
   try{
@@ -450,18 +300,22 @@ async function createTip(amount){
 }
 closeQrBtn.addEventListener('click', ()=> qrModal.style.display='none');
 copyUpiBtn.addEventListener('click', async ()=>{
-  const data = await fetch('/tip', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({amount:10}) }).then(r=>r.json());
-  if(data && data.upi_link){
-    try{ await navigator.clipboard.writeText(data.upi_link); copyUpiBtn.textContent='Copied ✓'; }catch(e){ alert(data.upi_link); }
-  }
+  try{
+    const res = await fetch('/tip', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({amount:10}) });
+    const data = await res.json();
+    if(data && data.upi_link){
+      await navigator.clipboard.writeText(data.upi_link);
+      copyUpiBtn.textContent = 'Copied ✓';
+    }
+  }catch(e){ alert('Copy failed'); }
 });
 
 /* init */
-refreshHistoryList();
-if(localStorage.getItem('zultx_history')===null) {
+if(!currentConversationId){
+  currentConversationId = makeConvoId();
   localSaveInit(currentConversationId);
-  refreshHistoryList();
 }
+refreshHistoryList();
 </script>
 </body>
   </html>
