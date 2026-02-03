@@ -344,130 +344,68 @@ function addFeedbackRow(aiDiv, q){
 }
 
 /* ---------- streaming sendMessage (robust) ---------- */
-async function sendMessage(){
-  const text = input.value.trim();
-  if(!text || streaming) return;
+async function sendMessage() {
+  const msg = input.value.trim();
+  if (!msg) return;
 
-  focusInput();
-  addUserMsg(text);
   input.value = "";
-  sendBtn.disabled = true;
-  streaming = true;
-  showTyping(true);
-  const aiDiv = addAiMsg("");
+  addUserBubble(msg);
 
-  if(lastAbortController){
-    try{ lastAbortController.abort(); }catch(_){}
-  }
-  const controller = new AbortController();
-  lastAbortController = controller;
-  const TIMEOUT_MS = 15000;
-  const timeoutId = setTimeout(()=> controller.abort(), TIMEOUT_MS);
+  const res = await fetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: msg })
+  });
 
-  try {
-    const res = await fetch(`/ask?q=${encodeURIComponent(text)}&stream=true`, {
-      headers: { "Accept": "text/event-stream, application/json, text/plain" },
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder("utf-8");
 
-    if(!res.ok){
-      let errText = await res.text().catch(()=> "Server error");
-      try{ errText = JSON.parse(errText).error || JSON.parse(errText).detail || errText } catch(_){}
-      aiDiv.textContent = "⚠️ Server error: " + errText;
-      return;
-    }
+  let buffer = "";
+  let aiBubble = createAiBubble("");
 
-    if(!res.body){
-      const full = await res.text();
-      aiDiv.textContent += full;
-      addFeedbackRow(aiDiv, text);
-      return;
-    }
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
 
-    const reader = res.body.getReader();
-    const dec = new TextDecoder("utf-8");
-    let buffer = "";
+    buffer += decoder.decode(value, { stream: true });
 
-    function appendChunk(t){
-      if(!t) return;
-      aiDiv.textContent += t;
-      chatArea.scrollTop = chatArea.scrollHeight;
-    }
+    // 🔥 SPLIT SSE EVENTS
+    const events = buffer.split("\n\n");
+    buffer = events.pop(); // keep incomplete chunk
 
-    while(true){
-      const { value, done } = await reader.read();
-      if(done) break;
-      buffer += dec.decode(value, { stream: true });
+    for (const evt of events) {
+      if (!evt.startsWith("data:")) continue;
 
-      const events = buffer.split(/\n\n/);
-      buffer = events.pop();
+      const data = evt.replace("data:", "").trim();
+      if (!data || data === "[DONE]") continue;
 
-      for(const ev of events){
-        const lines = ev.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-        const dataLines = lines.filter(l=>l.startsWith("data:")).map(l=>l.slice(5).trim());
-
-        if(dataLines.length === 0){
-          const raw = ev.trim();
-          if(raw && raw !== "[DONE]") appendChunk(raw);
-          continue;
-        }
-
-        const payload = dataLines.join("\n");
-        if(!payload || payload === "[DONE]") continue;
-
-        let obj = null;
-        try { obj = JSON.parse(payload); } catch(e){ obj = null; }
-
-        if(obj){
-          // openai-style
-          const choices = obj.choices;
-          if(Array.isArray(choices)){
-            for(const ch of choices){
-              if(ch.delta && typeof ch.delta.content === "string") appendChunk(ch.delta.content);
-              else if(ch.message && typeof ch.message.content === "string") appendChunk(ch.message.content);
-              else if(typeof ch.text === "string") appendChunk(ch.text);
-            }
-            continue;
-          }
-          // gemini-ish
-          if(obj.candidates && obj.candidates[0] && obj.candidates[0].content && Array.isArray(obj.candidates[0].content.parts)){
-            for(const p of obj.candidates[0].content.parts) if(p.text) appendChunk(p.text);
-            continue;
-          }
-
-          // generic fallback
-          appendChunk(JSON.stringify(obj).slice(0,200));
-        } else {
-          appendChunk(payload);
-        }
-      }
-    }
-
-    if(buffer && buffer.trim() && buffer.trim() !== "[DONE]"){
+      let json;
       try {
-        const p = JSON.parse(buffer.trim());
-        appendChunk(JSON.stringify(p).slice(0,200));
+        json = JSON.parse(data);
       } catch {
-        appendChunk(buffer.trim());
+        continue; // ignore broken JSON
+      }
+
+      // ✅ Mistral / OpenAI
+      const delta = json.choices?.[0]?.delta?.content;
+      if (delta) {
+        aiBubble.textContent += delta;
+        scrollToBottom();
+      }
+
+      // ✅ Gemini
+      const parts = json.candidates?.[0]?.content?.parts;
+      if (parts) {
+        for (const p of parts) {
+          if (p.text) {
+            aiBubble.textContent += p.text;
+            scrollToBottom();
+          }
+        }
       }
     }
-
-    addFeedbackRow(aiDiv, text);
-
-  } catch(err){
-    if(err.name === 'AbortError'){
-      aiDiv.textContent = "⚠️ No response — server timed out. Try again.";
-    } else {
-      console.error(err);
-      aiDiv.textContent = "⚠️ Connection lost.";
-    }
-  } finally {
-    showTyping(false);
-    sendBtn.disabled = false;
-    streaming = false;
   }
-}
+  }
 
 /* ---------- utils ---------- */
 function addToAiSafe(t){
@@ -523,7 +461,7 @@ function wrapText(ctx, text, maxWidth){
 /* ---------- letters loading & modals ---------- */
 async function loadLetters(){
   try{
-    const res = await fetch("/letters");
+    const res = await fetch("/letters/");
     if(!res.ok) return;
     const data = await res.json();
     const list = document.getElementById("lettersList");
