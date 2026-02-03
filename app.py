@@ -6,12 +6,13 @@ import time
 import traceback
 import urllib.parse
 import asyncio
-from typing import Generator, Union, Optional, AsyncGenerator
+from typing import Any, Generator, Optional
 
 from fastapi import FastAPI, Query, Body, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse, FileResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import inspect
 
 # Try optional external ask functions (phase_2 / phase_1).
 ASK_FUNC = None
@@ -34,155 +35,149 @@ os.makedirs(LETTERS_DIR, exist_ok=True)
 os.makedirs("feedback", exist_ok=True)
 os.makedirs("tips", exist_ok=True)
 
+# Create a sample letter if none exists
+example_path = os.path.join(LETTERS_DIR, "example.txt")
+if not os.path.exists(example_path):
+    with open(example_path, "w", encoding="utf-8") as f:
+        f.write("Hello from ZultX — this is an example letter.\n\nEnjoy building!\n")
+
 # Default UPI (safe placeholder)
 UPI_ID = os.getenv("UPI_ID", "9358588509@fam")
 
 app = FastAPI(title="ZULTX — v1.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# serve static if present (optional)
 if os.path.isdir("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
 def index():
+    # prefer index.html in cwd for easy deploy
     if os.path.exists("index.html"):
         return FileResponse("index.html")
     return HTMLResponse("<html><body><h1>ZultX</h1><p>UI missing</p></body></html>")
 
 
-# SSE helper: always output `data: {...}\n\n` strings
-def sse_format(obj: dict) -> str:
-    return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
-
-
-# Internal fallback generator (async) to stream a string answer in chunks
-async def async_chunk_text_as_sse(text: str, chunk_size: int = 24, delay: float = 0.03) -> AsyncGenerator[str, None]:
-    # start role event (optional)
-    yield sse_format({"choices": [{"delta": {"role": "assistant", "content": ""}}]})
-    i = 0
-    n = len(text)
-    while i < n:
-        chunk = text[i: i + chunk_size]
-        payload = {"choices": [{"delta": {"content": chunk}}]}
-        yield sse_format(payload)
-        await asyncio.sleep(delay)
-        i += chunk_size
-    # finalization event
-    yield sse_format({"choices": [{"delta": {}},], "finish_reason": "stop"})
-    yield "data: [DONE]\n\n"
-
-
-# If external ASK_FUNC is missing, provide a simple fallback ask() that returns helpful text
-def local_fallback_ask(user_input: str, mode: str = "friend", temperature: Optional[float] = None,
-                       max_tokens: int = 512, stream: bool = False, speed: float = 0.02):
-    # A friendly response template (improves "I m sad" example)
-    base = user_input.strip().lower()
-    if "sad" in base or "depressed" in base or "unhappy" in base:
-        answer = ("Hey — I'm really sorry you're feeling sad. "
-                  "You're not alone. If you'd like, tell me what's going on and I will listen. "
-                  "Here are three quick things you can try right now:\n\n"
-                  "1) Take three slow deep breaths (inhale 4s, hold 2s, exhale 6s).\n"
-                  "2) Stand up and stretch for 30 seconds.\n"
-                  "3) Write one small thing you're grateful for.\n\n"
-                  "If you want, share more — I'm here to help you think through it.")
+# Local fallback "brain" (synchronous string return)
+def local_fallback_ask_plain(user_input: str, mode: str = "friend", temperature: Optional[float] = None,
+                             max_tokens: int = 512) -> str:
+    base = (user_input or "").strip().lower()
+    if any(word in base for word in ("sad", "depressed", "unhappy", "down")):
+        answer = (
+            "Hey — I'm really sorry you're feeling sad. You're not alone.\n\n"
+            "Three quick things that might help right now:\n"
+            "1) Take three slow breaths (inhale 4s, hold 2s, exhale 6s).\n"
+            "2) Stretch or stand up for 30 seconds.\n"
+            "3) Write one small thing you're grateful for.\n\n"
+            "If you want, tell me more — I'm here to listen."
+        )
     else:
-        answer = f"Hey. I heard: \"{user_input}\". I'd say: be kind to yourself — tell me more and I'll help."
-
-    # If streaming requested, return an async generator
-    if stream:
-        async def gen():
-            async for s in async_chunk_text_as_sse(answer, chunk_size=24, delay=speed):
-                yield s
-        return gen()
+        answer = f"Hey. I heard: \"{user_input}\". Be kind to yourself — tell me more and I'll help."
     return answer
 
 
-# Helper that converts result (string / generator / async generator) into an SSE async generator of strings
-async def to_sse_async_generator(result: Union[str, Generator[str, None, None], AsyncGenerator[str, None], None],
-                                 stream_speed: float = 0.02) -> AsyncGenerator[str, None]:
-    # If result is None, use fallback
+# Utility to consume different result shapes into a single string answer
+async def normalize_result_to_text(result: Any) -> str:
+    # If result is None -> fallback
     if result is None:
-        result = local_fallback_ask("I have nothing to say", stream=False)
+        return local_fallback_ask_plain("")
 
-    # Async generator returned directly (assume it yields plain text fragments OR already sse-formatted strings)
+    # If result is a coroutine (awaitable), await it
+    if asyncio.iscoroutine(result):
+        try:
+            result = await result
+        except Exception:
+            # if awaiting fails, fallback to string
+            return str(result)
+
+    # If result is an async generator
     if hasattr(result, "__aiter__"):
-        async for part in result:  # parts may be plain text fragments
-            # If already looks like sse-formatted (starts with "data:") pass through; else wrap it.
-            if isinstance(part, str) and part.strip().startswith("data:"):
-                yield part
-            else:
-                yield sse_format({"choices": [{"delta": {"content": str(part)}}]})
-        yield "data: [DONE]\n\n"
-        return
+        parts = []
+        try:
+            async for p in result:
+                parts.append(str(p))
+        except Exception:
+            # best-effort
+            pass
+        return "".join(parts)
 
-    # Sync iterator
-    if hasattr(result, "__iter__") and not isinstance(result, str):
-        for part in result:
-            yield sse_format({"choices": [{"delta": {"content": str(part)}}]})
-            await asyncio.sleep(stream_speed)
-        yield "data: [DONE]\n\n"
-        return
+    # If result is a regular generator or iterable (but not string)
+    if hasattr(result, "__iter__") and not isinstance(result, (str, bytes)):
+        parts = []
+        try:
+            for p in result:
+                parts.append(str(p))
+        except Exception:
+            pass
+        return "".join(parts)
 
-    # Plain string
-    text = str(result or "")
-    async for s in async_chunk_text_as_sse(text, chunk_size=24, delay=stream_speed):
-        yield s
+    # If it's a dict with 'answer' field, prefer it
+    if isinstance(result, dict) and "answer" in result:
+        return str(result.get("answer") or "")
+
+    # final fallback to str
+    return str(result)
 
 
 @app.get("/ask")
 async def ask_get(
     q: str = Query(..., alias="q"),
     mode: str = Query("friend"),
-    stream: bool = Query(True),
-    speed: float = Query(0.02),
     temperature: Optional[float] = Query(None),
     max_tokens: int = Query(512)
 ):
+    """
+    Non-streaming /ask endpoint.
+    Always returns JSON: {"answer": "<text>"}
+    """
     if not q or not q.strip():
         raise HTTPException(status_code=400, detail="Missing query")
 
-    # Try to call imported ASK_FUNC if available
-    if ASK_FUNC:
-        try:
-            result = ASK_FUNC(user_input=q, mode=mode, temperature=temperature, max_tokens=max_tokens, stream=stream, speed=speed)
-        except Exception as e:
-            traceback.print_exc()
-            return JSONResponse({"error": "ZULTX processing failed", "detail": str(e)}, status_code=500)
-
-        # If streaming requested, return SSE stream
-        if stream:
-            # If ASK_FUNC already returned an async generator, wrap it (safely)
+    try:
+        # If ASK_FUNC provided, call it. We call with stream=False to encourage plain outputs.
+        if ASK_FUNC is not None:
             try:
-                return StreamingResponse(to_sse_async_generator(result, stream_speed=speed), media_type="text/event-stream")
-            except Exception:
-                # fall back to fake stream
-                return StreamingResponse(to_sse_async_generator(local_fallback_ask(q, stream=True, speed=speed), stream_speed=speed),
-                                         media_type="text/event-stream")
+                # Some ask funcs are async, some sync. Call and then normalize.
+                # If the function accepts "stream" param, we pass stream=False; else ignore.
+                sig = None
+                try:
+                    sig = inspect.signature(ASK_FUNC)
+                except Exception:
+                    sig = None
+
+                kwargs = {"user_input": q, "mode": mode, "temperature": temperature, "max_tokens": max_tokens}
+                # only pass 'stream' if present in signature
+                if sig and "stream" in sig.parameters:
+                    kwargs["stream"] = False
+                if sig and "speed" in sig.parameters:
+                    # to be safe, pass a small speed (ignored in non-stream)
+                    kwargs["speed"] = 0.02
+
+                result = ASK_FUNC(**kwargs)
+            except TypeError:
+                # fallback to calling with positional args
+                try:
+                    result = ASK_FUNC(q, mode, temperature, max_tokens, False)
+                except Exception:
+                    result = ASK_FUNC(q)
         else:
-            # Non-streaming response: unify to JSON { answer: text }
-            try:
-                if hasattr(result, "__aiter__"):
-                    # consume async generator
-                    parts = []
-                    async for p in result:
-                        parts.append(str(p))
-                    text = "".join(parts)
-                elif hasattr(result, "__iter__") and not isinstance(result, str):
-                    text = "".join([str(p) for p in result])
-                else:
-                    text = str(result)
-            except Exception:
-                text = str(result)
-            return JSONResponse({"answer": text})
+            result = local_fallback_ask_plain(q, mode=mode, temperature=temperature, max_tokens=max_tokens)
 
-    # If ASK_FUNC not present — use local fallback
-    fallback_text = local_fallback_ask(q, stream=False)
-    if stream:
-        return StreamingResponse(to_sse_async_generator(local_fallback_ask(q, stream=True, speed=speed), stream_speed=speed),
-                                 media_type="text/event-stream")
-    else:
-        return JSONResponse({"answer": fallback_text})
+        text = await normalize_result_to_text(result)
+    except Exception as e:
+        traceback.print_exc()
+        # Return a friendly failure message (still JSON)
+        return JSONResponse({"answer": f"ZULTX error: {str(e)}"}, status_code=500)
+
+    # final safety: ensure not excessively long
+    if not isinstance(text, str):
+        text = str(text)
+    if len(text) > 20000:
+        text = text[:20000] + "\n\n...[truncated]"
+
+    return JSONResponse({"answer": text})
 
 
 @app.get("/letters")
