@@ -461,7 +461,7 @@ function wrapText(ctx, text, maxWidth){
 /* ---------- letters loading & modals ---------- */
 async function loadLetters(){
   try{
-    const res = await fetch("/letters/");
+    const res = await fetch("/letters");
     if(!res.ok) return;
     const data = await res.json();
     const list = document.getElementById("lettersList");
