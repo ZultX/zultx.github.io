@@ -362,50 +362,48 @@ async function sendMessage() {
 
   let buffer = "";
   let aiBubble = createAiBubble("");
-
   while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
+  const { value, done } = await reader.read();
+  if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
+  buffer += decoder.decode(value, { stream: true });
 
-    // 🔥 SPLIT SSE EVENTS
-    const events = buffer.split("\n\n");
-    buffer = events.pop(); // keep incomplete chunk
+  // 🔥 Extract ALL data: {...} blocks safely
+  const regex = /data:\s*(\{[\s\S]*?\})(?=data:|\[DONE\]|$)/g;
+  let match;
 
-    for (const evt of events) {
-      if (!evt.startsWith("data:")) continue;
+  while ((match = regex.exec(buffer)) !== null) {
+    const payload = match[1];
 
-      const data = evt.replace("data:", "").trim();
-      if (!data || data === "[DONE]") continue;
+    let obj;
+    try {
+      obj = JSON.parse(payload);
+    } catch {
+      continue; // ignore broken chunk
+    }
 
-      let json;
-      try {
-        json = JSON.parse(data);
-      } catch {
-        continue; // ignore broken JSON
-      }
+    // ✅ OpenAI / Mistral
+    const delta = obj.choices?.[0]?.delta?.content;
+    if (delta) {
+      aiBubble.textContent += delta;
+      scrollToBottom();
+    }
 
-      // ✅ Mistral / OpenAI
-      const delta = json.choices?.[0]?.delta?.content;
-      if (delta) {
-        aiBubble.textContent += delta;
-        scrollToBottom();
-      }
-
-      // ✅ Gemini
-      const parts = json.candidates?.[0]?.content?.parts;
-      if (parts) {
-        for (const p of parts) {
-          if (p.text) {
-            aiBubble.textContent += p.text;
-            scrollToBottom();
-          }
+    // ✅ Gemini
+    const parts = obj.candidates?.[0]?.content?.parts;
+    if (parts) {
+      for (const p of parts) {
+        if (p.text) {
+          aiBubble.textContent += p.text;
+          scrollToBottom();
         }
       }
     }
   }
-  }
+
+  // 🧹 trim processed buffer (prevents memory leak)
+  buffer = buffer.slice(Math.max(buffer.lastIndexOf("data:"), 0));
+  } 
 
 /* ---------- utils ---------- */
 function addToAiSafe(t){
