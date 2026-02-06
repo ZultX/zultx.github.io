@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ZultX.github.io/zultx/sitemap.xml
+Sitemap: https://zultx.github.io/ZultX-v2/sitemap.xml
