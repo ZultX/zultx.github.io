@@ -48,7 +48,7 @@ header{position:sticky;top:0;height:var(--header-h);display:flex;align-items:cen
   <div class="top-tip" id="topTipBtn"><span>🍏</span><strong> Tip</strong></div>
   <div style="display:flex;gap:10px;align-items:center">
     <button id="lettersBtn" style="background:transparent;border:0;cursor:pointer">✉️ Letters</button>
-    <div class="small-muted">Mode: Friendly</div>
+    <div class="small-muted">v1.1/Friendly</div>
   </div>
 </header>
 
@@ -70,15 +70,15 @@ header{position:sticky;top:0;height:var(--header-h);display:flex;align-items:cen
   <main class="main">
     <div id="centerScreen" class="center-screen">
       <div style="text-align:center;max-width:720px">
-        <div style="font-size:28px;font-weight:800;margin-bottom:16px;color:#fff">What can I help with?</div>
-        <button id="startBtn" style="padding:12px 18px;border-radius:999px;border:1px solid var(--outline);background:transparent;color:var(--text);cursor:pointer">Ask About Life With ZultX..</button>
+        <div style="font-size:28px;font-weight:800;margin-bottom:16px;color:#fff">What ZultX can help?</div>
+        <button id="startBtn" style="padding:12px 18px;border-radius:999px;border:1px solid var(--outline);background:transparent;color:var(--text);cursor:pointer">Ask ZultX Something New..</button>
       </div>
     </div>
 
     <div id="chatArea" class="chat-wrap" style="display:none"></div>
 
     <div class="compose">
-      <textarea id="input" placeholder="Ask ZultX Positively." rows="1"></textarea>
+      <textarea id="input" placeholder="Ask ZultX Positive.." rows="1"></textarea>
       <button id="sendBtn">Send</button>
     </div>
   </main>
@@ -203,7 +203,7 @@ async function sendMessage(){
   sendBtn.disabled = true;
 
   // insert temporary AI bubble
-  const aiDiv = addBubble('ai', 'ZultX is thinking...');
+  const aiDiv = addBubble('ai', 'ZultX is thinking deep.. (For Deeper, Better, User friendly)');
 
   try{
     // call non-stream endpoint; always returns JSON { answer: "..." }
@@ -216,13 +216,13 @@ async function sendMessage(){
 );
 
     if(!res.ok){
-      aiDiv.textContent = "⚠️ Server error";
+      aiDiv.textContent = "⚠️ Server error — Make Sure Connection Working.";
       saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
       return;
     }
 
     const data = await res.json();
-    const ans = (data && data.answer) ? data.answer : "⚠️ No answer returned.";
+    const ans = (data && data.answer) ? data.answer : "I cannot compute it safely. Is there is anything other i can help with?";
     aiDiv.textContent = ans;
     // already saved ai bubble in addBubble? We used addBubble earlier and saved. But ensure history saved:
     // replace last saved AI (addBubble already saved via addAiMsg?) - we used addBubble directly, so save now:
