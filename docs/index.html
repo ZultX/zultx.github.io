@@ -107,7 +107,7 @@ header{position:sticky;top:0;height:var(--header-h);display:flex;align-items:cen
 
 <!-- QR modal -->
 <div id="qrModal" class="modal" style="width:420px;left:calc(50% - 210px);right:auto;text-align:center">
-  <h3>Scan to pay (UPI)</h3>
+  <h3>Scan to pay (UPI) - If No Qr Shown, Click Copy UPI</h3>
   <div id="qrImgWrap" style="margin-top:12px"></div>
   <div style="margin-top:12px"><button id="copyUpiBtn">Copy UPI</button><button id="closeQrBtn">Close</button></div>
 </div>
@@ -203,7 +203,7 @@ async function sendMessage(){
   sendBtn.disabled = true;
 
   // insert temporary AI bubble
-  const aiDiv = addBubble('ai', 'ZultX is thinking deep.. (For Deeper, Better, User friendly)');
+  const aiDiv = addBubble('ai', 'ZultX is thinking deep.. (For Deeper, Better, User friendly Answers)');
 
   try{
     // call non-stream endpoint; always returns JSON { answer: "..." }
@@ -230,7 +230,7 @@ async function sendMessage(){
 
   } catch(err){
     console.error(err);
-    aiDiv.textContent = "⚠️ Connection failed.";
+    aiDiv.textContent = "⚠️ Connection failed - Make Sure Everything Is Fine.";
     saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
   } finally {
     sendBtn.disabled = false;
