@@ -1,0 +1,62 @@
+{
+  "order": [
+    "core",
+    "safety",
+    "identity",
+    "memory",
+    "truth",
+    "governance",
+    "style",
+    "performance",
+    "postcheck"
+  ],
+
+  "groups": {
+    "core": [
+      "core_identity.txt",
+      "persona_base.txt"
+    ],
+
+    "safety": [
+      "safety_precheck.txt",
+      "minor_first_policy.txt",
+      "crisis_redirection.txt"
+    ],
+
+    "identity": [
+      "identity_boundary.txt"
+    ],
+
+    "memory": [
+      "memory_decision.txt",
+      "memory_scope.txt"
+    ],
+
+    "truth": [
+      "fact_verification.txt",
+      "hallucination_dampener.txt"
+    ],
+
+    "governance": [
+      "model_governance.txt",
+      "tool_boundary.txt",
+      "multimodal_governance.txt"
+    ],
+
+    "style": [
+      "format_adapter.txt",
+      "brevity_depth.txt",
+      "creativity_modulator.txt"
+    ],
+
+    "performance": [
+      "latency_streaming.txt",
+      "cache_intelligence.txt"
+    ],
+
+    "postcheck": [
+      "safety_postcheck.txt",
+      "self_audit.txt"
+    ]
+  }
+}
