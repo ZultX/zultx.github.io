@@ -17,16 +17,16 @@ import inspect
 # Try optional external ask functions (phase_2 / phase_1).
 ASK_FUNC = None
 try:
-    from phase_2 import ask as ask_func
+    from phase_3 import ask as ask_func
     ASK_FUNC = ask_func
-    print("[ZULTX] Using phase_2.ask")
+    print("[ZULTX] Using phase_3.ask")
 except Exception:
     try:
-        from phase_1 import ask as ask_func
+        from phase_2 import ask as ask_func
         ASK_FUNC = ask_func
-        print("[ZULTX] Using phase_1.ask")
+        print("[ZULTX] Using phase_2.ask")
     except Exception as e:
-        print("[ZULTX] No phase_1/phase_2 ask() found, using internal fallback. Error:", e)
+        print("[ZULTX] No phase_3/phase_2 ask() found, using internal fallback. Error:", e)
         ASK_FUNC = None
 
 # ensure directories
