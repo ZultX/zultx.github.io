@@ -17,51 +17,37 @@ Author: ZULTX Core
 from pathlib import Path
 from typing import Dict, List, Optional
 from phase_1 import ask as base_ask
-
+import json
+import hashlib
 # -----------------------------
 # CONFIG
 # -----------------------------
 
 ADAPTER_DIR = Path("prompt/adapters")
 
-# Order MATTERS — this is the soul chain
-ADAPTER_ORDER = [
-    "core_identity.txt",
-    "persona_base.txt",
-    "safety_precheck.txt",
-    "minor_first_policy.txt",
-    "crisis_redirection.txt",
-    "identity_boundary.txt",
-    "memory_decision.txt",
-    "memory_scope.txt",
-    "fact_verification.txt",
-    "hallucination_dampener.txt",
-    "model_governance.txt",
-    "latency_streaming.txt",
-    "format_adapter.txt",
-    "brevity_depth.txt",
-    "creativity_modulator.txt",
-    "cache_intelligence.txt",
-    "tool_boundary.txt",
-    "multimodal_governance.txt",
-    "safety_postcheck.txt",
-    "self_audit.txt",
-]
 
 # -----------------------------
 # ADAPTER LOADER
 # -----------------------------
+MANIFEST_PATH = ADAPTER_DIR / "manifest.json"
 
-def load_adapters() -> Dict[str, str]:
-    """
-    Loads adapter prompt files into memory.
-    """
+def load_manifest():
+    if not MANIFEST_PATH.exists():
+        raise FileNotFoundError("manifest.json missing in adapters directory")
+    return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+
+def load_adapters():
+    manifest = load_manifest()
     adapters = {}
-    for fname in ADAPTER_ORDER:
-        path = ADAPTER_DIR / fname
-        if not path.exists():
-            raise FileNotFoundError(f"Missing adapter: {fname}")
-        adapters[fname] = path.read_text(encoding="utf-8").strip()
+
+    for group_name in manifest["order"]:
+        files = manifest["groups"].get(group_name, [])
+        for fname in files:
+            path = ADAPTER_DIR / fname
+            if not path.exists():
+                raise FileNotFoundError(f"Missing adapter: {fname}")
+            adapters[fname] = path.read_text(encoding="utf-8").strip()
+
     return adapters
 
 
@@ -71,31 +57,34 @@ _ADAPTERS = load_adapters()
 # -----------------------------
 # PROMPT COMPOSER
 # -----------------------------
-
 def compose_system_prompt(
     *,
     persona: Optional[str] = None,
+    phase: str = "full",  # rag | memory | full
     extra_rules: Optional[List[str]] = None
 ) -> str:
-    """
-    Builds the full system prompt from adapters.
-    """
+    manifest = load_manifest()
     blocks: List[str] = []
 
-    for name in ADAPTER_ORDER:
-        text = _ADAPTERS[name]
+    for group in manifest["order"]:
+        # phase gating
+        if phase == "rag" and group == "memory":
+            continue
+        if phase == "memory" and group == "truth":
+            continue
 
-        # Persona is modular
-        if name == "persona_base.txt" and persona:
-            text = text + f"\n\nActive persona: {persona}"
+        for fname in manifest["groups"][group]:
+            text = _ADAPTERS[fname]
 
-        blocks.append(text)
+            if fname == "persona_base.txt" and persona:
+                text += f"\n\nActive persona: {persona}"
+
+            blocks.append(text)
 
     if extra_rules:
         blocks.append("\n".join(extra_rules))
 
     return "\n\n---\n\n".join(blocks)
-
 
 # -----------------------------
 # PUBLIC ENTRYPOINT (PHASE 2)
@@ -104,13 +93,10 @@ def ask(
     user_input: str,
     *,
     persona: Optional[str] = None,
-    mode: Optional[str] = None,
-    temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
-    speed: Optional[float] = None,
+    phase: str = "full",
     stream: bool = False,
     timeout: int = 30,
-    **_ignore
+    **_
 ):
     """
     THE OFFICIAL ZULTX INTERFACE FROM v1.1 ONWARD.
@@ -119,9 +105,9 @@ def ask(
     - Delegates to Phase_1 (immortal brain)
     - Safe for all future upgrades
     """
-
     system_prompt = compose_system_prompt(
-        persona=persona
+    persona=persona,
+    phase=phase
     )
 
     final_prompt = (
