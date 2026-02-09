@@ -5,7 +5,7 @@ Persona affects:
 - Emoji usage
 - Verbosity
 - Energy level
-- Hype.
+- Hype
 
 Persona NEVER affects:
 - Safety rules
