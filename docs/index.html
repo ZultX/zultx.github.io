@@ -156,14 +156,67 @@ html.light .msg.ai{background:linear-gradient(180deg,#f7f7f7,#efefef);color:var(
 .temp-chat-icon{
   transition: box-shadow .18s ease, transform .18s ease;
 }
+/* Markdown formatting */
+.msg.ai h1, .msg.ai h2, .msg.ai h3 {
+  margin: 12px 0 8px;
+  font-weight: 900;
+}
 
+.msg.ai table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  display: block;
+  overflow-x: auto;
+}
+
+.msg.ai th, .msg.ai td {
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 8px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.msg.ai th {
+  background: rgba(255,215,0,0.08);
+  font-weight: 800;
+}
+
+/* Code blocks */
+.msg.ai pre {
+  background: #0b1220;
+  padding: 14px;
+  border-radius: 12px;
+  overflow-x: auto;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.msg.ai code {
+  font-family: monospace;
+  color: #ffd54a;
+}
+
+/* Copy button */
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255,215,0,0.15);
+  border: none;
+  color: #ffd54a;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  }
+  
 /* temp chats list */
 .temp-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .temp-entry{padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center}
-
 /* responsive */
 @media (max-width:880px){ .side{display:none} .center-inner{padding:8px} .suggest-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))} }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body class="dark">
 <header>
@@ -398,17 +451,46 @@ function confirmAndDelete(convoId){
 function addBubble(kind, text){
   const d = document.createElement('div');
   d.className = 'msg ' + (kind === 'user' ? 'user' : 'ai');
-  d.textContent = text;
+
+  if(kind === 'ai'){
+    d.innerHTML = marked.parse(text);
+    enhanceCodeBlocks(d);
+  } else {
+    d.textContent = text;
+  }
+
   chatArea.appendChild(d);
   chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: "smooth" });
   return d;
-}
+  }
+  
+
 function addUserMsg(text){ addBubble('user', text); saveMessageToHistory(currentConversationId, 'user', text); }
 function addAiMsg(text){ addBubble('ai', text); saveMessageToHistory(currentConversationId, 'ai', text); }
 function addSystemMsg(text){
   const d = document.createElement('div'); d.style.textAlign='center'; d.style.color='var(--muted)'; d.textContent = text; chatArea.appendChild(d); chatArea.scrollTop = chatArea.scrollHeight;
 }
+function enhanceCodeBlocks(container){
+  container.querySelectorAll('pre code').forEach(block => {
+    const pre = block.parentElement;
+    if(pre.classList.contains('code-enhanced')) return;
+    pre.classList.add('code-enhanced');
 
+    const btn = document.createElement('button');
+    btn.textContent = 'Copy';
+    btn.className = 'copy-btn';
+
+    btn.onclick = () => {
+      navigator.clipboard.writeText(block.innerText);
+      btn.textContent = 'Copied ✅';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    };
+
+    pre.style.position = 'relative';
+    pre.appendChild(btn);
+  });
+  }
+  
 /* -------------- SEND MESSAGE (no stream) -------------- */
 async function sendMessage(){
   const text = input.value.trim();
