@@ -57,9 +57,29 @@ a{color:inherit}
 
 /* Header */
 header{
-  position:sticky;top:0;height:var(--header-h);display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
-  background:transparent;color:var(--text);backdrop-filter: blur(6px);border-bottom:1px solid rgba(255,255,255,0.03);
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  height:var(--header-h);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 14px;
+  background:rgba(11,11,15,0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color:var(--text);
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  z-index:9999;
 }
+.app{
+  display:flex;
+  min-height:100vh;
+  padding-top:var(--header-h);
+  position:relative;
+}
+
 .logo{font-weight:900;display:flex;align-items:center;font-size:20px}
 .logo .fire{background:linear-gradient(90deg,#ff3b3b,#ff8a00);-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900}
 .logo .x-black{margin-left:6px;background:var(--outline);color:var(--text);padding:4px 8px;border-radius:8px;font-size:14px;font-weight:800}
@@ -118,6 +138,9 @@ html.light .msg.ai{background:linear-gradient(180deg,#f7f7f7,#efefef);color:var(
 /* modals */
 .modal{display:none;position:fixed;left:8%;top:10%;right:8%;bottom:10%;background:var(--card-bg);border-radius:12px;padding:18px;z-index:10030;overflow:auto;border:1px solid rgba(255,255,255,0.04)}
 .modal.sm{width:420px;left:calc(50% - 210px);right:auto}
+#shareBtn:hover{
+  box-shadow:0 0 16px rgba(255,215,0,0.25);
+}
 
 /* temp chats list */
 .temp-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
@@ -140,6 +163,9 @@ html.light .msg.ai{background:linear-gradient(180deg,#f7f7f7,#efefef);color:var(
     <div id="themeToggle" class="top-tip" title="Toggle light / dark"><span id="themeIcon">🌗</span></div>
     <div id="topTipBtn" class="top-tip"><span>🍏</span><strong style="margin-left:6px">Tip</strong></div>
     <div id="lettersBtn" style="padding:8px 10px;border-radius:10px;background:var(--glass);cursor:pointer">✉️ Letters</div>
+    <div id="shareBtn" class="top-tip" title="Share ZultX"><span>🔗</span><strong style="margin-left:6px">Share</strong></div>
+}
+
 
     <!-- temp chat 3/4 circle icon -->
     <div id="tempChatBtn" class="temp-chat-icon" title="Temporary chats">
@@ -632,6 +658,33 @@ function updateThemeIcon(){
 }
 themeToggle.onclick = toggleTheme;
 applyInitialTheme();
+
+const shareBtn = document.getElementById('shareBtn');
+
+shareBtn.onclick = async ()=>{
+  const shareData = {
+    title: 'ZultX AI',
+    text: 'ZultX — Fast, Positive, Experimental AI. Try it now.',
+    url: 'https://zultx.github.io/ZultX-v2/'
+  };
+
+  // Mobile / supported browsers
+  if(navigator.share){
+    try{
+      await navigator.share(shareData);
+    }catch(e){
+      // user cancelled, ignore
+    }
+  } else {
+    // Desktop fallback → copy link
+    try{
+      await navigator.clipboard.writeText(shareData.url);
+      alert('Link copied! Share ZultX anywhere 🚀');
+    }catch(e){
+      prompt('Copy & share this link:', shareData.url);
+    }
+  }
+};
 
 /* -------------- BINDINGS -------------- */
 sendBtn.addEventListener('click', sendMessage);
