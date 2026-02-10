@@ -302,6 +302,7 @@ html.dark .msg.ai p code{
 /* responsive */
 @media (max-width:880px){ .side{display:none} .center-inner{padding:8px} .suggest-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))} }
 </style>
+  
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
   marked.setOptions({
@@ -311,6 +312,9 @@ html.dark .msg.ai p code{
     smartypants: true
   });
 </script>
+  
+<link rel="stylesheet"
+ href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 
 </head>
 <body class="dark">
@@ -548,6 +552,9 @@ function addBubble(kind, text){
 
   if(kind === 'ai'){
     d.innerHTML = marked.parse(text);
+    d.querySelectorAll("pre code").forEach(block => {
+  hljs.highlightElement(block);
+});
     enhanceCodeBlocks(d);
   } else {
     d.textContent = text;
@@ -908,5 +915,6 @@ refreshHistoryList();
 centerScreen.style.display = 'flex';
 chatArea.style.display = 'none';
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 </body>
 </html>
