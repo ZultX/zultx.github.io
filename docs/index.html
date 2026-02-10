@@ -434,7 +434,7 @@ const lettersBtn = document.getElementById("lettersBtn");
 const lettersModal = document.getElementById("lettersModal");
 const modalLettersContent = document.getElementById("modalLettersContent");
 const closeLettersBtn = document.getElementById("closeLettersBtn");
-
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const topTipBtn = document.getElementById("topTipBtn");
 const tipModal = document.getElementById("tipModal");
 const closeTipBtn = document.getElementById("closeTipBtn");
@@ -913,12 +913,17 @@ shareBtn.onclick = async ()=>{
 /* -------------- BINDINGS -------------- */
 sendBtn.addEventListener('click', sendMessage);
 input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
+  if (e.key === "Enter") {
+    if (isMobile) {
+      // 📱 MOBILE → allow newline
+      return;
+    }
+
+    // 💻 PC → send (keep your old behavior)
     e.preventDefault();
-    sendMessage(); // SEND
+    sendMessage();
   }
 });
-
 
 /* init: ensure conversation exists */
 if(!currentConversationId){
