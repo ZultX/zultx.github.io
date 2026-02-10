@@ -30,7 +30,8 @@
     ],
 
     "personality": [
-      "coach.txt"
+      "coach.txt",
+      "business.txt"
     ],
 
     "memory": [
