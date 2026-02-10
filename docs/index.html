@@ -573,7 +573,7 @@ function addBubble(kind, text, stream = true){
 
   if(kind === 'ai'){
     if(stream){
-      fakeStream(d, text, 9);
+      fakeStream(d, text, 5);
     } else {
       d.innerHTML = marked.parse(text);
       d.querySelectorAll("pre code").forEach(b => hljs.highlightElement(b));
