@@ -223,44 +223,32 @@ html.dark .msg.ai pre{
   color:#ffd54a;
   opacity:0.85;
 }
-
 /* Inline code – green and readable */
 .msg.ai p code {
-  background: rgba(34,197,94,0.15); /* soft green bg */
-  color: #15803d;                  /* strong green text */
+  background: rgba(34,197,94,0.15);
+  color: #15803d;
   padding: 2px 6px;
   border-radius: 6px;
   font-size: 0.95em;
   font-weight: 500;
 }
 
-/* Dark mode inline code */
 html.dark .msg.ai p code {
   background: rgba(34,197,94,0.25);
   color: #4ade80;
 }
+
+/* Let highlight.js control BLOCK code colors */
+.msg.ai pre code {
+  color: inherit;
+}
+
 
 /* Let highlight.js control colors */
 .msg.ai pre code {
   color: inherit;
 }
 
-/* Inline code ONLY (not blocks) */
-.msg.ai p code {
-  background: rgba(255,215,0,0.12);
-  color: #b45309;
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 0.95em;
-}
-
-/* Dark mode inline */
-html.dark .msg.ai p code {
-  background: rgba(255,193,7,0.25);
-  color: #ffd54a;
-}
-
-  
 
 .msg.ai table {
   background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent);
@@ -290,13 +278,6 @@ html.dark .msg.ai p code {
 
 .msg.ai li{
   margin:6px 0;
-}
-
-.msg.ai p code{
-  background: rgba(255,215,0,0.12);
-  padding:2px 6px;
-  border-radius:6px;
-  font-size:0.95em;
 }
 
   
@@ -592,9 +573,6 @@ function addBubble(kind, text){
 
   if(kind === 'ai'){
     fakeStream(d, text, 9); // 9 = typing speed
-    d.querySelectorAll("pre code").forEach(block => {
-  hljs.highlightElement(block);
-});
     enhanceCodeBlocks(d);
   } else {
     d.textContent = text;
@@ -678,11 +656,9 @@ async function sendMessage(){
 
     const data = await res.json();
     const ans = (data && data.answer) ? data.answer : "I cannot compute it safely. Is there anything else I can help with?";
-    aiDiv.innerHTML = marked.parse(ans);
-    enhanceCodeBlocks(aiDiv);
-    // Save AI answer (if not temp)
+    fakeStream(aiDiv, ans, 9); // 👈 STREAM SPEED
     saveMessageToHistory(currentConversationId, 'ai', ans);
-
+    
   } catch(err){
     console.error(err);
     aiDiv.textContent = "⚠️ Connection failed - Check your network.";
