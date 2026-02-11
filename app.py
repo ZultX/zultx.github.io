@@ -126,40 +126,46 @@ async def ask_get(
     q: str = Query(..., alias="q"),
     mode: str = Query("friend"),
     temperature: Optional[float] = Query(None),
-    max_tokens: int = Query(512)
+    max_tokens: int = Query(512),
+    session_id: Optional[str] = Query(None, description="Session id for conversation buffer"),
+    user_id: Optional[str] = Query(None, description="Per-user ID (owner) for memory isolation"),
+    memory_mode: str = Query("auto", description="memory mode: auto | manual | off | watch")
 ):
     """
-    Non-streaming /ask endpoint.
-    Always returns JSON: {"answer": "<text>"}
+    /ask?q=...&session_id=xxx&user_id=me&memory_mode=auto
     """
     if not q or not q.strip():
         raise HTTPException(status_code=400, detail="Missing query")
 
     try:
-        # If ASK_FUNC provided, call it. We call with stream=False to encourage plain outputs.
         if ASK_FUNC is not None:
             try:
-                # Some ask funcs are async, some sync. Call and then normalize.
-                # If the function accepts "stream" param, we pass stream=False; else ignore.
                 sig = None
                 try:
-                    sig = inspect.signature(ASK_FUNC)
+                    import inspect as _inspect
+                    sig = _inspect.signature(ASK_FUNC)
                 except Exception:
                     sig = None
 
-                kwargs = {"user_input": q, "mode": mode, "temperature": temperature, "max_tokens": max_tokens}
-                # only pass 'stream' if present in signature
+                kwargs = {
+                    "user_input": q,
+                    "mode": mode,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    # pass session/user/mode to phase_4
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "memory_mode": memory_mode
+                }
+                # only pass 'stream' if function supports it
                 if sig and "stream" in sig.parameters:
                     kwargs["stream"] = False
-                if sig and "speed" in sig.parameters:
-                    # to be safe, pass a small speed (ignored in non-stream)
-                    kwargs["speed"] = 0.02
 
                 result = ASK_FUNC(**kwargs)
             except TypeError:
-                # fallback to calling with positional args
+                # fallback: try positional variant
                 try:
-                    result = ASK_FUNC(q, mode, temperature, max_tokens, False)
+                    result = ASK_FUNC(q, session_id, user_id, False)
                 except Exception:
                     result = ASK_FUNC(q)
         else:
@@ -168,17 +174,15 @@ async def ask_get(
         text = await normalize_result_to_text(result)
     except Exception as e:
         traceback.print_exc()
-        # Return a friendly failure message (still JSON)
         return JSONResponse({"answer": f"ZULTX error: {str(e)}"}, status_code=500)
 
-    # final safety: ensure not excessively long
     if not isinstance(text, str):
         text = str(text)
     if len(text) > 20000:
         text = text[:20000] + "\n\n...[truncated]"
 
     return JSONResponse({"answer": text})
-
+ 
 
 @app.get("/letters")
 def list_letters():
