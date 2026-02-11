@@ -1,14 +1,16 @@
 # phase_4.py
 """
-ZULTX Phase 4 — Memory orchestration (single-file)
-- phase_4.ask(...) uses phase_3.ask(...) for core reasoning
-- Maintains a SQLite memory store (metadata) + TF-IDF semantic recall
-- Extractor: lightweight rules + (optional) LLM extraction stub
-- Promotion rules, scoring, expiry, audit logs, queue for failed vector syncs
-- Safe defaults: conservative write thresholds, policy filters
-- Designed to run on Railway / local (no required external services)
+ZULTX Phase 4 — Final god-tier memory orchestration (single-file)
+Features:
+ - phase4_ask(user_input, session_id, user_id, memory_mode, ...) calls phase_3.ask(...) for reasoning
+ - Per-user memory isolation (owner/user_id)
+ - Conversation buffer (recent 7 messages per session)
+ - STM (short expiry), CM (longer expiry), LTM (very long), EM (ephemeral with expiry)
+ - Safe defaults, promotion rules, audit logs, retry queue
+ - TF-IDF fallback recall (sklearn optional) or substring fallback
+ - Conservative extraction + "save permanent" detection
+ - Designed for Railway / local use
 """
-
 import os
 import re
 import json
@@ -29,42 +31,46 @@ try:
 except Exception:
     SKLEARN_AVAIL = False
 
-# Phase 3 (RAG / reasoning wrapper) import
+# Import phase_3 (reasoning/RAG wrapper)
 try:
     from phase_3 import ask as phase3_ask
 except Exception as e:
     phase3_ask = None
     print("[phase_4] WARNING: phase_3.ask not importable:", e)
 
-# CONFIG
+# CONFIG (tweakable via env)
 DB_PATH = os.getenv("ZULTX_MEMORY_DB", "zultx_memory.db")
-VECTOR_CACHE_PATH = os.getenv("ZULTX_VECTOR_CACHE", ".zultx_vector_cache.pkl")
-MAX_INJECT_TOKENS = int(os.getenv("ZULTX_MAX_INJECT_TOKENS", "1600"))
+MAX_INJECT_TOKENS = int(os.getenv("ZULTX_MAX_INJECT_TOKENS", "1200"))
 TFIDF_TOP_K = int(os.getenv("ZULTX_TFIDF_K", "12"))
-PROMOTE_TO_CM_SCORE = float(os.getenv("ZULTX_PROMOTE_CM", "0.45"))
-PROMOTE_TO_LTM_SCORE = float(os.getenv("ZULTX_PROMOTE_LTM", "0.80"))
-CONFIDENCE_PROMOTE_THRESHOLD = float(os.getenv("ZULTX_CONF_PROMOTE", "0.75"))
 
-USE_OPENAI_EMBEDDINGS = False  # keep false by default; can be toggled if you add env and code
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
+# Promotion thresholds (conservative)
+PROMOTE_TO_CM_SCORE = float(os.getenv("ZULTX_PROMOTE_CM", "0.45"))      # need both score+confidence to promote
+PROMOTE_TO_LTM_SCORE = float(os.getenv("ZULTX_PROMOTE_LTM", "0.80"))
+CONFIDENCE_PROMOTE_THRESHOLD = float(os.getenv("ZULTX_CONF_PROMOTE", "0.70"))
+
+# Expiry defaults
+STM_EXPIRE_DAYS = int(os.getenv("ZULTX_STM_DAYS", "1"))       # short-term: ~1 day
+CM_EXPIRE_DAYS = int(os.getenv("ZULTX_CM_DAYS", "365"))      # chat memory: 1 year
+LTM_EXPIRE_DAYS = None                                        # LTM: no expiry by default
+EM_DEFAULT_DAYS = int(os.getenv("ZULTX_EM_DAYS", "7"))       # ephemeral default: 7 days
 
 # Basic policy: regex patterns for sensitive items we should not store raw
 SENSITIVE_PATTERNS = [
     re.compile(r"\b\d{10}\b"),  # simple phone number
-    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),  # US SSN-like
+    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),  # SSN-like
     re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"),  # email
     re.compile(r"\b(?:card(?:-|\s)?num|credit card|visa|mastercard)\b", re.I),
-    # add more patterns as needed
 ]
 
 # ---------------------------
-# SQLite memory store helpers
+# SQLite memory store helpers (owner column added)
 # ---------------------------
-_INIT_SQL = """
+_INIT_SQL = f"""
 PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
-    type TEXT NOT NULL, -- STM|CM|LTM|EM
+    owner TEXT,                 -- owner / user_id (nullable -> global)
+    type TEXT NOT NULL,         -- STM|CM|LTM|EM
     content TEXT NOT NULL,
     source TEXT,
     raw_snippet TEXT,
@@ -80,7 +86,9 @@ CREATE TABLE IF NOT EXISTS memories (
     metadata TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_type_score ON memories (type, memory_score DESC, last_used DESC);
+CREATE INDEX IF NOT EXISTS idx_owner_type_score ON memories (owner, type, memory_score DESC, last_used DESC);
+CREATE INDEX IF NOT EXISTS idx_expires_at ON memories (expires_at);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id TEXT PRIMARY KEY,
     ts TEXT,
@@ -113,7 +121,7 @@ def initialize_db():
 initialize_db()
 
 # ---------------------------
-# Utility functions
+# Utilities
 # ---------------------------
 def now_ts() -> str:
     return datetime.utcnow().isoformat()
@@ -130,18 +138,19 @@ def uuid4() -> str:
     return str(uuid.uuid4())
 
 def clamp(v, a=0.0, b=1.0):
+    try:
+        v = float(v)
+    except Exception:
+        v = a
     return max(a, min(b, v))
 
 # ---------------------------
 # Memory score computation
 # ---------------------------
 def compute_memory_score(importance: float, frequency: int, created_at: Optional[str], confidence: float) -> float:
-    # normalize inputs
     importance = clamp(importance)
     confidence = clamp(confidence)
-    # frequency normalization: log2 scale
     norm_frequency = min(1.0, math.log2(1 + max(0, frequency)) / 6.0)
-    # recency: 1 / (1 + age_days/7)
     if created_at:
         created_dt = parse_ts(created_at)
         if created_dt:
@@ -158,19 +167,13 @@ def compute_memory_score(importance: float, frequency: int, created_at: Optional
 # Simple policy engine
 # ---------------------------
 def policy_allow_store(content: str) -> Tuple[bool, Optional[str]]:
-    """
-    Return (allowed, reason_if_blocked)
-    Conservative: block if any sensitive pattern matches
-    """
     c = content or ""
     for p in SENSITIVE_PATTERNS:
         if p.search(c):
             return False, "sensitive_pattern"
-    # additional heuristics (e.g., profanity) can go here
     return True, None
 
 def anonymize_if_needed(content: str) -> str:
-    # Very conservative: strip emails and phone numbers to placeholders
     s = content
     s = re.sub(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "[email]", s)
     s = re.sub(r"\b\d{10}\b", "[phone]", s)
@@ -180,23 +183,19 @@ def anonymize_if_needed(content: str) -> str:
 # TF-IDF semantic recall helper (fallback)
 # ---------------------------
 class SimpleRecall:
-    """
-    If sklearn available, uses TF-IDF vectorizer for semantic search.
-    Else falls back to simple substring overlap ranking.
-    The corpus is built from memories' distilled `content` field (CM+LTM).
-    """
     def __init__(self):
         self.vectorizer = None
-        self.corpus = []  # list of (mem_id, content)
+        self.corpus = []  # list of (mem_id, owner, content)
         self.matrix = None
 
     def build_from_db(self):
         with get_db_conn() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id, content, memory_score FROM memories WHERE type IN ('CM','LTM')")
+            # Load all CM+LTM into the in-memory index (we'll filter by owner when retrieving)
+            cur.execute("SELECT id, owner, content FROM memories WHERE type IN ('CM','LTM')")
             rows = cur.fetchall()
-            self.corpus = [(r["id"], r["content"]) for r in rows]
-            texts = [t for (_id, t) in self.corpus]
+            self.corpus = [(r["id"], r["owner"], r["content"]) for r in rows]
+            texts = [t for (_id, _owner, t) in self.corpus]
             if SKLEARN_AVAIL and texts:
                 try:
                     self.vectorizer = TfidfVectorizer(max_features=50000)
@@ -208,59 +207,68 @@ class SimpleRecall:
                 self.vectorizer = None
                 self.matrix = None
 
-    def retrieve(self, query: str, k: int = TFIDF_TOP_K) -> List[Tuple[str, str, float]]:
-        # returns list of (mem_id, content, score)
+    def retrieve(self, query: str, k: int = TFIDF_TOP_K, owner: Optional[str] = None) -> List[Tuple[str, str, float]]:
         if not self.corpus:
             return []
+        # Filter corpus indices by owner: owner or global (owner is NULL)
+        filtered = []
+        for mem_id, mem_owner, content in self.corpus:
+            if owner is None or mem_owner is None or mem_owner == owner:
+                filtered.append((mem_id, content))
+        if not filtered:
+            return []
+        ids, texts = zip(*filtered)
         if self.vectorizer is not None and self.matrix is not None:
             try:
                 qv = self.vectorizer.transform([query])
-                sims = cosine_similarity(qv, self.matrix)[0]
+                # build reduced matrix for filtered entries (fallback: re-vectorize filtered)
+                # For practicality, compute similarities by vectorizing filtered texts
+                fm = self.vectorizer.transform(list(texts))
+                sims = cosine_similarity(qv, fm)[0]
                 idxs = sims.argsort()[::-1][:k]
                 out = []
                 for i in idxs:
-                    mem_id, content = self.corpus[int(i)]
-                    out.append((mem_id, content, float(sims[int(i)])))
+                    out.append((ids[int(i)], texts[int(i)], float(sims[int(i)])))
                 return out
             except Exception:
                 pass
-        # substring fallback scoring
+        # substring fallback
         q = query.lower()
         scored = []
-        for mem_id, content in self.corpus:
-            t = content.lower()
+        for mem_id, t in zip(ids, texts):
+            txt = t.lower()
             score = 0.0
-            if q in t:
+            if q in txt:
                 score += 1.0
             for w in q.split()[:10]:
-                if w and w in t:
+                if w and w in txt:
                     score += 0.01
-            scored.append((mem_id, content, score))
+            scored.append((mem_id, t, score))
         scored.sort(key=lambda x: x[2], reverse=True)
         return scored[:k]
 
 _recall_instance = SimpleRecall()
 def refresh_recall_index():
-    _recall_instance.build_from_db()
+    try:
+        _recall_instance.build_from_db()
+    except Exception as e:
+        audit("recall_index_failed", None, {"err": str(e)})
 
 # ---------------------------
-# DB operations: CRUD + audit
+# DB operations + audit
 # ---------------------------
 def insert_memory(mem: Dict[str, Any]) -> str:
-    """
-    mem must contain keys:
-    id, type, content, source, raw_snippet, created_at, last_used, expires_at,
-    confidence, importance, frequency, memory_score, tags, consent, metadata
-    """
     with _db_lock:
         conn = get_db_conn()
         cur = conn.cursor()
         cur.execute("""
             INSERT OR REPLACE INTO memories
-            (id,type,content,source,raw_snippet,created_at,last_used,expires_at,confidence,importance,frequency,memory_score,tags,consent,metadata)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            (id, owner, type, content, source, raw_snippet, created_at, last_used, expires_at,
+             confidence, importance, frequency, memory_score, tags, consent, metadata)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             mem.get("id"),
+            mem.get("owner"),
             mem.get("type"),
             mem.get("content"),
             mem.get("source"),
@@ -278,8 +286,8 @@ def insert_memory(mem: Dict[str, Any]) -> str:
         ))
         conn.commit()
         conn.close()
-    audit("create_memory", mem.get("id"), {"summary": mem.get("content")[:140]})
-    # refresh recall index asynchronously (cheap)
+    audit("create_memory", mem.get("id"), {"owner": mem.get("owner"), "summary": mem.get("content")[:140]})
+    # asynchronous recall index refresh
     try:
         threading.Thread(target=refresh_recall_index, daemon=True).start()
     except Exception:
@@ -295,6 +303,19 @@ def update_memory_last_used(mem_id: str):
         conn.close()
     audit("update_last_used", mem_id, {"ts": now_ts()})
 
+def delete_owner_name_memories(owner: Optional[str]):
+    # Delete any existing 'name:' memory for that owner (prevents name collisions)
+    with _db_lock:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        if owner is None:
+            cur.execute("DELETE FROM memories WHERE content LIKE 'name:%' AND owner IS NULL")
+        else:
+            cur.execute("DELETE FROM memories WHERE content LIKE 'name:%' AND owner = ?", (owner,))
+        conn.commit()
+        conn.close()
+    audit("delete_name_memory", None, {"owner": owner})
+
 def get_memory(mem_id: str) -> Optional[Dict[str, Any]]:
     with get_db_conn() as conn:
         cur = conn.cursor()
@@ -307,10 +328,13 @@ def get_memory(mem_id: str) -> Optional[Dict[str, Any]]:
         r["metadata"] = json.loads(r["metadata"]) if r["metadata"] else {}
         return r
 
-def list_memories(limit: int = 50) -> List[Dict[str, Any]]:
+def list_memories(limit: int = 50, owner: Optional[str] = None) -> List[Dict[str, Any]]:
     with get_db_conn() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM memories ORDER BY memory_score DESC, last_used DESC LIMIT ?", (limit,))
+        if owner is None:
+            cur.execute("SELECT * FROM memories ORDER BY memory_score DESC, last_used DESC LIMIT ?", (limit,))
+        else:
+            cur.execute("SELECT * FROM memories WHERE owner = ? ORDER BY memory_score DESC, last_used DESC LIMIT ?", (owner, limit))
         rows = cur.fetchall()
         out = []
         for r in rows:
@@ -343,16 +367,10 @@ def enqueue_retry(item: Dict[str, Any]):
 # Extractor (rules + LLM-assist stub)
 # ---------------------------
 def rule_based_extract(user_input: str, assistant_text: str) -> List[Dict[str, Any]]:
-    """
-    Very conservative rule-based extraction:
-    - "remember: X" or "remember that X" explicit commands
-    - "my name is X" patterns (lower priority)
-    - "I prefer X" patterns
-    Returns candidate memories with suggested importance/confidence.
-    """
     candidates = []
     text = (user_input or "") + "\n\n" + (assistant_text or "")
-    # explicit remember
+
+    # explicit: "remember: X" (CM by default)
     for m in re.finditer(r"\bremember(?: that)?\s*[:\-]?\s*(.+?)(?:\.|$|\n)", text, flags=re.I):
         content = m.group(1).strip()
         if content:
@@ -363,7 +381,20 @@ def rule_based_extract(user_input: str, assistant_text: str) -> List[Dict[str, A
                 "confidence": 0.9,
                 "reason": "explicit_remember"
             })
-    # preferences
+
+    # explicit permanent save: "remember permanently" / "save permanent"
+    for m in re.finditer(r"\b(?:remember|save)\s+(?:permanent|permanently|forever)\s*[:\-]?\s*(.+?)(?:\.|$|\n)", text, flags=re.I):
+        content = m.group(1).strip()
+        if content:
+            candidates.append({
+                "content": content,
+                "suggested_type": "LTM",
+                "importance": 0.95,
+                "confidence": 0.95,
+                "reason": "explicit_permanent"
+            })
+
+    # preferences: "I prefer X"
     for m in re.finditer(r"\bI (?:prefer|like|love|hate|want)\s+(.*?)(?:\.|$|\n)", text, flags=re.I):
         content = m.group(1).strip()
         if content and len(content) < 200:
@@ -374,34 +405,28 @@ def rule_based_extract(user_input: str, assistant_text: str) -> List[Dict[str, A
                 "confidence": 0.7,
                 "reason": "preference_statement"
             })
-    # name
-    m = re.search(r"\bmy name is\s+([A-Z][a-z]{0,30})", text)
+
+    # name detection (careful): "my name is X" or "I am X" (capitalize detection a bit)
+    m = re.search(r"\b(?:my name is|i am)\s+([A-Z][a-zA-Z]{0,1,50}|[A-Za-z0-9 _-]{1,50})", text)
     if m:
         name = m.group(1).strip()
         candidates.append({
             "content": f"name:{name}",
             "suggested_type": "CM",
-            "importance": 0.8,
-            "confidence": 0.8,
+            "importance": 0.85,
+            "confidence": 0.85,
             "reason": "self_identify"
         })
+
     return candidates
 
 def llm_assisted_extract_stub(user_input: str, assistant_text: str) -> List[Dict[str, Any]]:
-    """
-    Placeholder for LLM-assisted extraction.
-    For Railway-safe default, this is a stub that returns nothing.
-    If you integrate OpenAI or another LLM, implement a safe prompt here and return
-    candidate memory items with confidence and suggested tags.
-    """
-    # conservative: return empty list by default
+    # Railway-safe stub. Integrate external LLM here when you want (careful with privacy).
     return []
 
 def extract_candidates(user_input: str, assistant_text: str) -> List[Dict[str, Any]]:
-    # merge rule-based + llm-assisted (llm stub optional)
     cands = rule_based_extract(user_input, assistant_text)
     cands += llm_assisted_extract_stub(user_input, assistant_text)
-    # normalize candidates
     out = []
     for c in cands:
         content = c.get("content", "").strip()
@@ -409,13 +434,12 @@ def extract_candidates(user_input: str, assistant_text: str) -> List[Dict[str, A
             continue
         allowed, reason = policy_allow_store(content)
         if not allowed:
-            # try anonymize
             content2 = anonymize_if_needed(content)
-            # if anonymization changed it, allow with low confidence
             if content2 != content:
                 content = content2
-                c["confidence"] = min(0.6, c.get("confidence", 0.6))
+                c["confidence"] = min(0.6, float(c.get("confidence", 0.6)))
             else:
+                audit("blocked_candidate", None, {"content": content[:200], "reason": reason})
                 continue
         out.append({
             "content": content,
@@ -430,56 +454,86 @@ def extract_candidates(user_input: str, assistant_text: str) -> List[Dict[str, A
 # Promotion decision (STM->CM->LTM)
 # ---------------------------
 def decide_storage_for_candidate(candidate: Dict[str, Any]) -> str:
-    """
-    Candidate contains: content, suggested_type, importance, confidence
-    Return: target_type in {STM, CM, LTM, EM}
-    """
     suggested = candidate.get("suggested_type", "CM")
     importance = clamp(float(candidate.get("importance", 0.5)))
     confidence = clamp(float(candidate.get("confidence", 0.5)))
-    # compute initial memory_score with created_at = now and frequency=1
     mem_score = compute_memory_score(importance, 1, now_ts(), confidence)
     candidate["memory_score"] = mem_score
-    # explicit time sensitive detection (very naive)
+
+    # time-sensitive detection (EM)
     if re.search(r"\btoday\b|\btomorrow\b|\bon\b\s+\w+\s+\d{1,2}\b", candidate["content"], flags=re.I):
         return "EM"
-    # if explicit suggestion LTM
+
+    # explicit LTM suggestion
     if suggested == "LTM" and mem_score >= PROMOTE_TO_LTM_SCORE and confidence >= 0.8:
         return "LTM"
-    if mem_score >= PROMOTE_TO_CM_SCORE or importance >= 0.8 or confidence >= CONFIDENCE_PROMOTE_THRESHOLD:
+
+    # conservative promotion to CM: require both score and confidence
+    if mem_score >= PROMOTE_TO_CM_SCORE and confidence >= CONFIDENCE_PROMOTE_THRESHOLD:
         return "CM"
+
     # fallback to STM
     return "STM"
 
 # ---------------------------
-# Inject memories into prompt context
+# Conversation buffer (in-memory) — recent messages per session
 # ---------------------------
-def retrieve_relevant_memories(user_input: str, max_tokens_budget: int = MAX_INJECT_TOKENS) -> List[Dict[str, Any]]:
-    """
-    1) Query TF-IDF recall to get top candidate mem_ids
-    2) Fetch from DB, filter by memory_score threshold
-    3) Rank by memory_score * similarity (approx)
-    4) Return list of memory dicts (id, content, why_matched)
-    """
-    refresh_recall_index()  # keep simple: rebuild index (cheap for small corpuses)
-    recs = _recall_instance.retrieve(user_input, k=TFIDF_TOP_K)
+_CONV_BUFFERS: Dict[str, List[Dict[str, str]]] = {}
+_CONV_LOCK = threading.Lock()
+CONV_BUFFER_LIMIT = 7
+
+def add_to_conversation_buffer(session_id: str, role: str, content: str):
+    if not session_id:
+        return
+    with _CONV_LOCK:
+        buf = _CONV_BUFFERS.get(session_id) or []
+        buf.append({"role": role, "content": content, "ts": now_ts()})
+        # keep only last N
+        if len(buf) > CONV_BUFFER_LIMIT:
+            buf = buf[-CONV_BUFFER_LIMIT:]
+        _CONV_BUFFERS[session_id] = buf
+
+def get_recent_chat_block(session_id: str) -> str:
+    with _CONV_LOCK:
+        buf = _CONV_BUFFERS.get(session_id, [])
+    if not buf:
+        return ""
+    lines = []
+    for m in buf:
+        lines.append(f"{m['role'].upper()}: {m['content']}")
+    return "-- RECENT CHAT --\n" + "\n".join(lines) + "\n-- END RECENT CHAT --\n\n"
+
+# ---------------------------
+# Memory retrieval (owner-aware) and injection
+# ---------------------------
+def retrieve_relevant_memories(user_input: str, owner: Optional[str], max_tokens_budget: int = MAX_INJECT_TOKENS) -> List[Dict[str, Any]]:
+    refresh_recall_index()
+    # Get candidate mem_ids from recall (owner-aware)
+    recs = _recall_instance.retrieve(user_input, k=TFIDF_TOP_K, owner=owner)
     out = []
     token_budget = max_tokens_budget
     for mem_id, content, sim in recs:
         mem = get_memory(mem_id)
         if not mem:
             continue
+        # owner filter: allow only mem.owner == owner or mem.owner is NULL (global)
+        mem_owner = mem.get("owner")
+        if mem_owner is not None and owner is not None and mem_owner != owner:
+            continue
         # discard expired EM
         if mem["type"] == "EM" and mem.get("expires_at"):
             exp = parse_ts(mem.get("expires_at"))
             if exp and exp < datetime.utcnow():
                 continue
-        # simple filter: memory_score threshold
-        if (mem.get("memory_score") or 0.0) < 0.2:
+        # filter low score
+        if (mem.get("memory_score") or 0.0) < 0.20:
             continue
+        # Skip injecting name memories unless query asks for identity
+        if mem["content"].startswith("name:"):
+            if not re.search(r'\b(name|who am i|what is my name|my name)\b', user_input.lower()):
+                continue
         snippet = mem.get("content", "")
-        # approximate token count by characters/4
-        approx_tokens = max(1, int(len(snippet) / 4))
+        approx_tokens = max(1, int(len(snippet) / 6))  # compact estimate
         if token_budget - approx_tokens < 0:
             break
         token_budget -= approx_tokens
@@ -488,8 +542,12 @@ def retrieve_relevant_memories(user_input: str, max_tokens_budget: int = MAX_INJ
             "content": snippet,
             "type": mem.get("type"),
             "memory_score": mem.get("memory_score"),
-            "why_matched": f"tfidf_sim={sim:.3f}"
+            "why_matched": f"tfidf_sim={sim:.3f}",
+            "owner": mem_owner
         })
+        # cap injected memories (safety)
+        if len(out) >= 6:
+            break
     return out
 
 def build_memory_injection_block(memories: List[Dict[str, Any]]) -> str:
@@ -497,18 +555,22 @@ def build_memory_injection_block(memories: List[Dict[str, Any]]) -> str:
         return ""
     parts = ["-- INJECTED MEMORIES (distilled) --"]
     for m in memories:
-        # keep injection compact
-        parts.append(f"[{m['id']}] ({m['type']}) {m['content']}  -- reason: {m['why_matched']}")
+        # compact bullet: do not dump raw text; keep distilled content short
+        content = m['content']
+        # show only short distilled snippet (first 120 chars)
+        short = (content[:120] + "…") if len(content) > 120 else content
+        parts.append(f"- [{m['id'][:8]}] ({m['type']}) {short}")
     parts.append("-- END INJECTED MEMORIES --\n")
     return "\n".join(parts)
 
 # ---------------------------
-# phase_4.ask orchestration
+# phase4_ask orchestration
 # ---------------------------
 def phase4_ask(user_input: str,
                session_id: Optional[str] = None,
-               session_stm: Optional[Dict[str, Any]] = None,
+               user_id: Optional[str] = None,
                *,
+               memory_mode: str = "auto",   # "auto" | "manual" | "off" | "watch"
                persona: Optional[str] = None,
                mode: Optional[str] = None,
                temperature: Optional[float] = None,
@@ -517,136 +579,213 @@ def phase4_ask(user_input: str,
                timeout: int = 30,
                **_kwargs) -> Dict[str, Any]:
     """
-    Main entrypoint. Returns a dict:
-    {
-      "answer": str,
-      "explain": [ {id, content, why} ],
-      "memory_actions": [ {id, action, detail} ],
-      "meta": { latency_ms, fallback, notes }
-    }
+    Returns dict:
+      { answer, explain, memory_actions, meta }
+    user_id: per-user owner id (string). If None -> owner is session_id if available.
+    memory_mode controls when memory is injected:
+       - "auto": inject relevant memories automatically
+       - "manual": inject only when explicit trigger words or 'watch' phrase
+       - "off": never inject memories
+       - "watch": force injection (like manual watch)
     """
     start = time.time()
+    owner = user_id if user_id is not None else session_id
     if phase3_ask is None:
         return {"answer": "[phase_3 missing] Core unavailable.", "explain": [], "memory_actions": [], "meta": {"latency_ms": int((time.time()-start)*1000), "fallback": True}}
 
-    # 0. session STM injection (small)
+    # sanitize memory_mode
+    memory_mode = (memory_mode or "auto").lower()
+    # 0) Add user query to conversation buffer (user message)
+    if session_id:
+        add_to_conversation_buffer(session_id, "user", user_input)
+
+    # Build STM block from session_stm (we support storing a small transient STM passed via _kwargs)
+    session_stm = _kwargs.get("session_stm") or {}
     stm_block = ""
     if session_stm:
-        # distilled STM bullets
-        stm_bullets = []
-        for k, v in session_stm.items():
-            stm_bullets.append(f"{k}: {v}")
-        stm_block = "-- STM --\n" + "\n".join(stm_bullets) + "\n-- END STM --\n\n"
+        bullets = [f"{k}: {v}" for k, v in session_stm.items()]
+        stm_block = "-- STM --\n" + "\n".join(bullets) + "\n-- END STM --\n\n"
 
-    # 1. Retrieve relevant CM/LTM memories
-    top_memories = retrieve_relevant_memories(user_input, max_tokens_budget=MAX_INJECT_TOKENS)
-    injection = build_memory_injection_block(top_memories)
+    # 1) Decide whether to retrieve/inject memories
+    inject_memories = []
+    if memory_mode == "off":
+        inject_memories = []
+    elif memory_mode == "manual":
+        # only if explicit 'watch' keywords or "watch memory" or "use memory" phrase
+        if re.search(r'\b(watch memory|use memory|remember for this|use my memory)\b', user_input, flags=re.I):
+            inject_memories = retrieve_relevant_memories(user_input, owner, max_tokens_budget=MAX_INJECT_TOKENS)
+    elif memory_mode == "watch":
+        inject_memories = retrieve_relevant_memories(user_input, owner, max_tokens_budget=MAX_INJECT_TOKENS)
+    else:  # auto
+        inject_memories = retrieve_relevant_memories(user_input, owner, max_tokens_budget=MAX_INJECT_TOKENS)
 
-    # 2. Build final prompt context
+    injection = build_memory_injection_block(inject_memories)
+    recent_chat_block = get_recent_chat_block(session_id) if session_id else ""
+
+    # 2) Compose final prompt
     prompt_parts = []
     if persona:
         prompt_parts.append(f"[Persona: {persona}]")
-    prompt_parts.append(stm_block)
-    prompt_parts.append(injection)
-    # safety/policy system instruction
+    # include recent chat first (so phase_3 receives context)
+    if recent_chat_block:
+        prompt_parts.append(recent_chat_block)
+    if stm_block:
+        prompt_parts.append(stm_block)
+    if injection:
+        prompt_parts.append(injection)
     prompt_parts.append("[System: Use user preferences and memory to answer. Do not invent personal data.]")
     prompt_parts.append("\nUser: " + user_input)
     final_prompt = "\n\n".join([p for p in prompt_parts if p])
 
-    # 3. Call phase_3.ask (reasoning + RAG wrapper)
+    # 3) Call phase_3.ask (reasoning wrapper)
     try:
         phase3_result = phase3_ask(final_prompt, persona=persona, mode=mode, temperature=temperature, max_tokens=max_tokens, stream=stream, timeout=timeout)
+        fallback = False
     except Exception as e:
-        # fallback: call phase_3 with raw user_input
+        # fallback to raw call
         try:
             phase3_result = phase3_ask(user_input, persona=persona, mode=mode, temperature=temperature, max_tokens=max_tokens, stream=stream, timeout=timeout)
             fallback = True
         except Exception as e2:
             return {"answer": "ZULTX error: reasoning core failed.", "explain": [], "memory_actions": [], "meta": {"latency_ms": int((time.time()-start)*1000), "fallback": True, "error": str(e2)}}
-    else:
-        fallback = False
-
-    # phase3_result may be string or structured; normalize
+   
+    # normalize phase3_result
     answer_text = phase3_result if isinstance(phase3_result, str) else phase3_result.get("answer") or str(phase3_result)
 
-    # 4. Mark used memories (increase frequency + last_used)
+    # append assistant answer to convo buffer
+    if session_id:
+        add_to_conversation_buffer(session_id, "assistant", answer_text)
+
+    # 4) Mark used memories last_used/frequency for injected ones
     used_ids = []
-    for m in top_memories:
+    for m in inject_memories:
         try:
             update_memory_last_used(m["id"])
             used_ids.append(m["id"])
         except Exception:
             pass
 
-    # 5. Extract candidate memories (rules + optional LLM)
+    # 5) Extract candidate memories from (user_input, answer_text)
     candidates = extract_candidates(user_input, answer_text)
 
-    # 6. Score & decide writes
+    # 6) Score, decide storage, set expiries, insert (owner-aware)
     memory_actions = []
     for cand in candidates:
-        # initial fields
-        cand_content = cand["content"]
-        allowed, block_reason = policy_allow_store(cand_content)
+        content = cand["content"]
+        allowed, block_reason = policy_allow_store(content)
         if not allowed:
-            # if blocked, skip and log
-            audit("blocked_candidate", None, {"content": cand_content[:200], "reason": block_reason})
-            continue
-        target = decide_storage_for_candidate(cand)
+            # try anonymize
+            content2 = anonymize_if_needed(content)
+            if content2 != content:
+                content = content2
+                cand["confidence"] = min(0.6, cand.get("confidence", 0.6))
+            else:
+                audit("blocked_candidate", None, {"content": content[:200], "reason": block_reason})
+                continue
+
+        # Decide storage type
+        target = decide_storage_for_candidate({**cand})
         mem_id = uuid4()
         created_at = now_ts()
+
+        # Set owner (per-user). If owner is None, it's global (rare). Default to owner variable above
+        mem_owner = owner
+
+        # Name uniqueness: if this is name:... ensure we delete previous one for this owner
+        if content.startswith("name:"):
+            try:
+                delete_owner_name_memories(mem_owner)
+            except Exception:
+                pass
+
+        # compute memory_score if not present
+        memory_score = cand.get("memory_score") or compute_memory_score(float(cand.get("importance", 0.5)), 1, created_at, float(cand.get("confidence", 0.5)))
+
         mem_obj = {
             "id": mem_id,
+            "owner": mem_owner,
             "type": target,
-            "content": cand_content,
+            "content": content,
             "source": "extractor",
-            "raw_snippet": cand_content[:800],
+            "raw_snippet": content[:800],
             "created_at": created_at,
             "last_used": created_at,
             "expires_at": None,
             "confidence": float(cand.get("confidence", 0.5)),
             "importance": float(cand.get("importance", 0.5)),
             "frequency": 1,
-            "memory_score": float(cand.get("memory_score", compute_memory_score(float(cand.get("importance", 0.5)), 1, created_at, float(cand.get("confidence", 0.5))))),
+            "memory_score": float(memory_score),
             "tags": [cand.get("reason", "auto")],
             "consent": True,
             "metadata": {"origin": "phase_4_extractor"}
         }
-        # If EM, set a default expiry (e.g., 7 days) unless time explicitly longer
-        if target == "EM":
-            expires = datetime.utcnow() + timedelta(days=7)
+
+        # set expiries depending on type
+        if target == "STM":
+            expires = datetime.utcnow() + timedelta(days=STM_EXPIRE_DAYS)
             mem_obj["expires_at"] = expires.isoformat()
-        # transactional write (SQLite single op is atomic)
+        elif target == "CM":
+            expires = datetime.utcnow() + timedelta(days=CM_EXPIRE_DAYS)
+            mem_obj["expires_at"] = expires.isoformat()
+        elif target == "LTM":
+            mem_obj["expires_at"] = None
+        elif target == "EM":
+            expires = datetime.utcnow() + timedelta(days=EM_DEFAULT_DAYS)
+            mem_obj["expires_at"] = expires.isoformat()
+
+        # attempt insertion transactionally
         try:
             insert_memory(mem_obj)
-            memory_actions.append({"id": mem_id, "action": "created", "type": target, "summary": mem_obj["content"][:140]})
+            memory_actions.append({"id": mem_id, "action": "created", "type": target, "owner": mem_owner, "summary": mem_obj["content"][:140]})
         except Exception as e:
-            # queue for retry
             enqueue_retry({"op": "insert_memory", "candidate": mem_obj})
             memory_actions.append({"id": None, "action": "queued", "detail": str(e)})
             audit("write_failed", None, {"error": str(e)})
-    # 7. Return structured response
+
+    # 7) Clean expired memories (best-effort background)
+    try:
+        threading.Thread(target=cleanup_expired_memories, daemon=True).start()
+    except Exception:
+        pass
+
+    # 8) Build explain block for UI
+    explain = []
+    for m in inject_memories:
+        explain.append({"id": m["id"], "content": m["content"], "why": m["why_matched"], "type": m["type"], "owner": m.get("owner")})
+
     meta = {
         "latency_ms": int((time.time() - start) * 1000),
         "fallback": fallback,
         "used_memory_count": len(used_ids),
         "candidate_count": len(candidates)
     }
-    explain = []
-    for m in top_memories:
-        explain.append({"id": m["id"], "content": m["content"], "why": m["why_matched"], "type": m["type"], "score": m.get("memory_score")})
-    return {
-        "answer": answer_text,
-        "explain": explain,
-        "memory_actions": memory_actions,
-        "meta": meta
-    }
+
+    return {"answer": answer_text, "explain": explain, "memory_actions": memory_actions, "meta": meta}
 
 # ---------------------------
-# Small CLI for manual testing
+# Cleanup expired memories
+# ---------------------------
+def cleanup_expired_memories():
+    with _db_lock:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        now = now_ts()
+        try:
+            cur.execute("DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at < ?", (now,))
+            deleted = cur.rowcount
+            conn.commit()
+            if deleted:
+                audit("cleanup_expired", None, {"deleted": deleted})
+        except Exception as e:
+            audit("cleanup_failed", None, {"error": str(e)})
+        finally:
+            conn.close()
+
+# ---------------------------
+# CLI for testing
 # ---------------------------
 if __name__ == "__main__":
-    print("ZULTX phase_4 local tester")
-    print("Initializing recall index...")
+    print("ZULTX phase_4 final tester")
     refresh_recall_index()
     while True:
         try:
@@ -654,14 +793,16 @@ if __name__ == "__main__":
             if ui.lower() in ("exit", "quit"):
                 break
             if ui.lower().startswith("listmem"):
-                rows = list_memories(50)
+                parts = ui.split()
+                owner = None
+                if len(parts) > 1:
+                    owner = parts[1]
+                rows = list_memories(50, owner)
                 for r in rows:
-                    print(f"{r['id'][:8]} {r['type']} score={r['memory_score']:.3f} freq={r['frequency']} content={r['content'][:80]}")
+                    print(f"{r['id'][:8]} owner={r['owner'][:8] if r['owner'] else 'GLOBAL'} {r['type']} score={r['memory_score']:.3f} freq={r['frequency']} content={r['content'][:80]}")
                 continue
             if ui.lower().startswith("forget "):
-                # simple forget by tag or id
                 target = ui.split(" ", 1)[1].strip()
-                # if id exists
                 mem = get_memory(target)
                 if mem:
                     with _db_lock:
@@ -673,7 +814,8 @@ if __name__ == "__main__":
                 print("No memory by that id; use listmem to inspect")
                 continue
 
-            res = phase4_ask(ui, session_id="cli_test")
+            # default: simulate session "cli_session" and user "cli_user"
+            res = phase4_ask(ui, session_id="cli_session", user_id="cli_user", memory_mode="auto")
             print("\nZultX:", res["answer"])
             if res.get("explain"):
                 print("\nUsed memories:")
