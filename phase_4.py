@@ -43,6 +43,13 @@ DB_PATH = os.getenv("ZULTX_MEMORY_DB", "zultx_memory.db")
 MAX_INJECT_TOKENS = int(os.getenv("ZULTX_MAX_INJECT_TOKENS", "1200"))
 TFIDF_TOP_K = int(os.getenv("ZULTX_TFIDF_K", "12"))
 
+# -----------------------------
+# CHAT BUFFER MEMORY
+# -----------------------------
+
+CHAT_BUFFERS = {}
+MAX_BUFFER_MESSAGES = 12
+
 # Promotion thresholds (conservative)
 PROMOTE_TO_CM_SCORE = float(os.getenv("ZULTX_PROMOTE_CM", "0.45"))      # need both score+confidence to promote
 PROMOTE_TO_LTM_SCORE = float(os.getenv("ZULTX_PROMOTE_LTM", "0.80"))
@@ -550,6 +557,41 @@ def retrieve_relevant_memories(user_input: str, owner: Optional[str], max_tokens
             break
     return out
 
+def get_buffer(session_id: str):
+    if not session_id:
+        session_id = "default"
+
+    if session_id not in CHAT_BUFFERS:
+        CHAT_BUFFERS[session_id] = []
+
+    return CHAT_BUFFERS[session_id]
+
+
+def append_to_buffer(session_id: str, role: str, content: str):
+    buffer = get_buffer(session_id)
+
+    buffer.append({
+        "role": role,
+        "content": content
+    })
+
+    # Trim buffer
+    if len(buffer) > MAX_BUFFER_MESSAGES:
+        CHAT_BUFFERS[session_id] = buffer[-MAX_BUFFER_MESSAGES:]
+
+
+def build_buffer_prompt(session_id: str) -> str:
+    buffer = get_buffer(session_id)
+
+    if not buffer:
+        return ""
+
+    convo = "Conversation so far:\n"
+    for msg in buffer:
+        convo += f"{msg['role'].capitalize()}: {msg['content']}\n"
+
+    return convo
+ 
 def build_memory_injection_block(memories: List[Dict[str, Any]]) -> str:
     if not memories:
         return ""
@@ -636,7 +678,14 @@ def phase4_ask(user_input: str,
     prompt_parts.append("[System: Use user preferences and memory to answer. Do not invent personal data.]")
     prompt_parts.append("\nUser: " + user_input)
     final_prompt = "\n\n".join([p for p in prompt_parts if p])
+    conversation_context = build_buffer_prompt(session_id)
 
+    final_prompt = f"""
+    {conversation_context}
+
+    Current question:
+    User: {user_input}
+    """
     # 3) Call phase_3.ask (reasoning wrapper)
     try:
         phase3_result = phase3_ask(final_prompt, persona=persona, mode=mode, temperature=temperature, max_tokens=max_tokens, stream=stream, timeout=timeout)
@@ -759,7 +808,8 @@ def phase4_ask(user_input: str,
         "used_memory_count": len(used_ids),
         "candidate_count": len(candidates)
     }
-
+    append_to_buffer(session_id, "user", user_input)
+    append_to_buffer(session_id, "assistant", response)
     return {"answer": answer_text, "explain": explain, "memory_actions": memory_actions, "meta": meta}
 
 # ---------------------------
