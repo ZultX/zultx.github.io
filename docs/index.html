@@ -992,23 +992,21 @@ shareBtn.onclick = async ()=>{
 sendBtn.addEventListener('click', sendMessage);
 const input = document.getElementById("input");
 const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-
 input.addEventListener("keydown", function(e) {
 
+  if (e.key === "Enter") {
     if (isMobile) {
-        // On mobile → Enter makes new line
-        if (e.key === "Enter") {
-            return; 
-        }
+      // Mobile → allow newline
+      return;
     } else {
-        // On desktop → Enter sends
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
+      // Desktop → send
+      e.preventDefault();
+      sendMessage();
     }
+  }
 
 });
+
 
 /* init: ensure conversation exists */
 if(!currentConversationId){
