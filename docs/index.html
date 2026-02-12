@@ -715,9 +715,19 @@ async function sendMessage(){
 
   try{
     // call non-stream endpoint; always returns JSON { answer: "..." }
+    const token = getToken();
+    const sessionId = ensureSessionId();
+    const headers = {
+     "Accept": "application/json",
+     "X-Session-Id": sessionId
+    };
+    if(token){
+     headers["Authorization"] = "Bearer " + token;
+    }
+
     const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, {
-      headers: { "Accept": "application/json" },
-      method: "GET",
+    method: "GET",
+    headers: headers
     });
 
     if(!res.ok){
