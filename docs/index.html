@@ -320,7 +320,14 @@ html.dark .msg.ai p code {
 
 /* form */
 .premium-form { margin-top:18px; display:flex;flex-direction:column; gap:12px; }
-.premium-form input { padding:12px;border-radius:10px;border:1px solid rgba(255,215,0,0.06); background: rgba(0,0,0,0.45); color:var(--text); }
+.premium-form input {
+  padding:12px;
+  border-radius:10px;
+  border:1px solid rgba(255,215,0,0.3);
+  background: #ffffff;
+  color: #111;
+  font-weight:600;
+  }
 .premium-actions { display:flex; gap:10px; margin-top:10px; align-items:center; }
 
 /* eye toggle button */
@@ -332,7 +339,13 @@ html.dark .msg.ai p code {
 .account-btn.login { background: #0f7f3e; color: #fff; border:1px solid rgba(255,255,255,0.04); }
 .account-btn.logout { background: #7a1f1f; color:#fff; border:1px solid rgba(255,255,255,0.04); }
 .account-welcome { color: var(--muted); font-size:13px; }
-
+.premium-actions button,
+.premium-form .menu-btn {
+  background: #ffffff;
+  color: #111;
+  font-weight:800;
+  }
+  
 /* temp chats list */
 .temp-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .temp-entry{padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center}
