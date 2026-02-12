@@ -1015,6 +1015,37 @@ chatArea.style.display = 'none';
 </div>
 
 <script>
+// ============================
+// AUTH CORE HELPERS (REQUIRED)
+// ============================
+
+function ensureSessionId(){
+  let sid = localStorage.getItem('zultx_session');
+  if(!sid){
+    sid = 'sess_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+    localStorage.setItem('zultx_session', sid);
+  }
+  return sid;
+}
+
+function setToken(token){
+  if(token){
+    localStorage.setItem('zultx_token', token);
+  } else {
+    localStorage.removeItem('zultx_token');
+  }
+}
+
+function getToken(){
+  return localStorage.getItem('zultx_token');
+}
+
+function loggedIn(){
+  return !!getToken();
+}
+</script>
+
+<script>
 /* PREMIUM AUTH JS (replace previous auth handlers) */
 const PREMIUM_AUTH = document.getElementById('premiumAuth');
 const P_CLOSE = document.getElementById('premiumClose');
