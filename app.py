@@ -69,7 +69,14 @@ if not os.path.exists(example_path):
 # FastAPI init
 # -------------------------
 app = FastAPI(title="ZULTX — v1.4 (auth)")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://zultx.github.io"
+    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # serve static if present (optional)
 if os.path.isdir("static"):
@@ -252,6 +259,13 @@ def login(payload: dict = Body(...)):
         return JSONResponse({"ok": False, "error": "invalid_credentials"}, status_code=401)
     token = token_for_user(user)
     return JSONResponse({"ok": True, "token": token, "user": {"id": user["id"], "username": user["username"], "email": user["email"]}})
+
+@app.get("/check_username")
+def check_username(username: str):
+    if not username.strip():
+        return {"available": False}
+    user = get_user_by_username(username.strip())
+    return {"available": user is None}
 
 @app.get("/me")
 def me(authorization: Optional[str] = Header(None)):
