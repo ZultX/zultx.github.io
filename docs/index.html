@@ -937,5 +937,204 @@ centerScreen.style.display = 'flex';
 chatArea.style.display = 'none';
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<!-- GREEN-PROTOCOL MODAL + AUTH JS (paste at end of <body> near other scripts) -->
+<!-- AUTH MODALS -->
+<div id="authModal" class="modal sm" aria-hidden="true" style="display:none;">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2 id="authTitle">Login</h2>
+    <button id="authCloseBtn">Close</button>
+  </div>
+  <div style="margin-top:12px">
+    <div id="authMsg" class="small-muted"></div>
+    <div style="margin-top:8px">
+      <input id="authUsername" placeholder="username" style="width:100%;padding:10px;border-radius:8px;margin-bottom:8px"/>
+      <input id="authEmail" placeholder="email (signup only)" style="width:100%;padding:10px;border-radius:8px;margin-bottom:8px;display:none"/>
+      <input id="authPassword" type="password" placeholder="password" style="width:100%;padding:10px;border-radius:8px;margin-bottom:8px"/>
+      <div style="display:flex;gap:8px">
+        <button id="authSubmitBtn">Login</button>
+        <button id="authToggleModeBtn">Switch to Signup</button>
+        <button id="guestBtn" title="Try without login">Try without login</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* AUTH + SESSION helper for GREEN PROTOCOL */
+const AUTH_MODAL = document.getElementById('authModal');
+const AUTH_TITLE = document.getElementById('authTitle');
+const AUTH_CLOSE = document.getElementById('authCloseBtn');
+const AUTH_MSG = document.getElementById('authMsg');
+const AUTH_USER = document.getElementById('authUsername');
+const AUTH_EMAIL = document.getElementById('authEmail');
+const AUTH_PASS = document.getElementById('authPassword');
+const AUTH_SUBMIT = document.getElementById('authSubmitBtn');
+const AUTH_TOGGLE = document.getElementById('authToggleModeBtn');
+const GUEST_BTN = document.getElementById('guestBtn');
+
+let authMode = 'login'; // or 'signup'
+
+function ensureSessionId(){
+  let sid = localStorage.getItem('zultx_session');
+  if(!sid){
+    sid = 'sess_' + Math.random().toString(36).slice(2) + '_' + Date.now();
+    localStorage.setItem('zultx_session', sid);
+  }
+  return sid;
+}
+ensureSessionId();
+
+function openAuth(mode='login'){
+  authMode = mode;
+  AUTH_MODAL.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  AUTH_MSG.textContent = '';
+  AUTH_USER.value = '';
+  AUTH_PASS.value = '';
+  AUTH_EMAIL.style.display = mode === 'signup' ? 'block' : 'none';
+  AUTH_TITLE.textContent = mode === 'signup' ? 'Sign up' : 'Login';
+  AUTH_SUBMIT.textContent = mode === 'signup' ? 'Create account' : 'Login';
+  AUTH_TOGGLE.textContent = mode === 'signup' ? 'Switch to Login' : 'Switch to Signup';
+}
+
+function closeAuth(){
+  AUTH_MODAL.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+AUTH_CLOSE.onclick = closeAuth;
+AUTH_TOGGLE.onclick = ()=> openAuth(authMode === 'signup' ? 'login' : 'signup');
+GUEST_BTN.onclick = ()=> {
+  // Try without login - just ensure session is present and close
+  ensureSessionId();
+  closeAuth();
+  alert('You can try ZultX without login. Remember your browser session to keep guest memories.');
+};
+
+// show small auth button in header (create if missing)
+(function addAuthHeaderBtn(){
+  const headerActions = document.querySelector('.header-actions');
+  if(!headerActions) return;
+  const authBtn = document.createElement('div');
+  authBtn.id = 'authBtn';
+  authBtn.className = 'top-tip';
+  authBtn.style.cursor = 'pointer';
+  authBtn.textContent = 'Login';
+  authBtn.onclick = ()=> openAuth('login');
+  headerActions.insertBefore(authBtn, headerActions.firstChild);
+})();
+
+// token helpers
+function setToken(token){
+  if(token) localStorage.setItem('zultx_token', token);
+  else localStorage.removeItem('zultx_token');
+  updateAuthUI();
+}
+function getToken(){ return localStorage.getItem('zultx_token'); }
+function loggedIn(){ return !!getToken(); }
+
+function updateAuthUI(){
+  const btn = document.getElementById('authBtn');
+  if(!btn) return;
+  if(loggedIn()){
+    btn.textContent = 'Account';
+  } else {
+    btn.textContent = 'Login';
+  }
+}
+updateAuthUI();
+
+// submit login/signup
+AUTH_SUBMIT.onclick = async ()=>{
+  const u = AUTH_USER.value.trim();
+  const p = AUTH_PASS.value;
+  const e = AUTH_EMAIL.value.trim();
+  if(!u || !p){ AUTH_MSG.textContent = 'username & password required'; return; }
+
+  const url = authMode === 'signup' ? `${API_BASE}/signup` : `${API_BASE}/login`;
+  const body = authMode === 'signup' ? { username: u, password: p, email: e } : { username: u, password: p };
+
+  try{
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+      mode: 'cors'
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok){
+      AUTH_MSG.textContent = data.error || 'Auth failed';
+      return;
+    }
+    setToken(data.token);
+    AUTH_MSG.textContent = '';
+    closeAuth();
+    alert('Logged in as ' + (data.user && data.user.username ? data.user.username : 'you'));
+  }catch(err){
+    console.error(err);
+    AUTH_MSG.textContent = 'Network error';
+  }
+};
+
+// update sendMessage to attach auth & session headers
+const ORIGINAL_sendMessage = window.sendMessage;
+window.sendMessage = async function patchedSendMessage(){
+  // same flow, but we will attach Authorization + X-Session-Id
+  const text = input.value.trim();
+  if(!text) return;
+
+  centerScreen.style.display = 'none';
+  chatArea.style.display = 'flex';
+
+  if(!currentConversationId){
+    currentConversationId = makeConvoId();
+    localSaveInit(currentConversationId);
+  }
+
+  addUserMsg(text);
+  input.value = '';
+  sendBtn.disabled = true;
+
+  const aiDiv = document.createElement('div');
+  aiDiv.className = 'msg ai';
+  aiDiv.textContent = 'ZultX is thinking deep..';
+  chatArea.appendChild(aiDiv);
+  chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: "smooth" });
+
+  try{
+    const sid = ensureSessionId();
+    const token = getToken();
+    const headers = { "Accept":"application/json" };
+    if(token) headers["Authorization"] = "Bearer " + token;
+    // also provide X-Session-Id so server can bind conversation buffer even for logged-in users
+    headers["X-Session-Id"] = sid;
+
+    const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}&session_id=${encodeURIComponent(sid)}`, {
+      method: "GET",
+      headers,
+      mode: 'cors'
+    });
+
+    if(!res.ok){
+      aiDiv.textContent = "⚠️ Server error — Make sure connection is working.";
+      saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
+      return;
+    }
+
+    const data = await res.json();
+    const ans = (data && data.answer) ? data.answer : "I cannot compute it safely. Is there anything else I can help with?";
+    fakeStream(aiDiv, ans, 9);
+    saveMessageToHistory(currentConversationId, 'ai', ans);
+  }catch(err){
+    console.error(err);
+    aiDiv.textContent = "⚠️ Connection failed - Check your network.";
+    saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
+  } finally {
+    sendBtn.disabled = false;
+    refreshHistoryList();
+  }
+};
+</script>
+
 </body>
 </html>
