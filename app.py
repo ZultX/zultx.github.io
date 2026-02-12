@@ -17,7 +17,7 @@ import inspect
 # Try optional external ask functions (phase_2 / phase_1).
 ASK_FUNC = None
 try:
-    from phase4 import ask as ask_func
+    from phase4 import phase4_ask as ask_func
     ASK_FUNC = ask_func
     print("[ZULTX] Using phase_4.ask")
 except Exception:
