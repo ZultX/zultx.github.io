@@ -987,24 +987,19 @@ shareBtn.onclick = async ()=>{
     }
   }
 };
-
+  
 /* -------------- BINDINGS -------------- */
 sendBtn.addEventListener('click', sendMessage);
-const input = document.getElementById("input");
-const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-input.addEventListener("keydown", function(e) {
 
+input.addEventListener("keydown", function(e) {
   if (e.key === "Enter") {
     if (isMobile) {
-      // Mobile → allow newline
-      return;
+      return; // mobile → newline
     } else {
-      // Desktop → send
       e.preventDefault();
       sendMessage();
     }
   }
-
 });
 
 
