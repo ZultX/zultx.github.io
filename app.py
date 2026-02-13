@@ -367,25 +367,32 @@ def test_providers():
     # Anthropic
     try:
         r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": os.getenv("ANTHROPIC_API_KEY"),
-                "anthropic-version": "2023-06-01"
-            },
-            json={"model":"claude-3-haiku-20240307","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}
-        )
-        results["anthropic"] = r.status_code == 200
+      "https://api.anthropic.com/v1/messages",
+      headers={
+        "x-api-key": os.getenv("ANTHROPIC_API_KEY"),
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      json={
+        "model": "claude-3-haiku-20240307",
+        "max_tokens": 5,
+        "messages": [{"role": "user", "content": "hi"}]
+      }
+      )
     except:
         results["anthropic"] = False
 
+    return results
+    
     # Google Gemini
     try:
         key = os.getenv("GOOGLE_API_KEY")
         r = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateText?key={key}",
-            json={"prompt":{"text":"hi"}}
-        )
-        results["gemini"] = r.status_code == 200
+    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}",
+    json={
+        "contents":[{"parts":[{"text":"hi"}]}]
+    }
+)
     except:
         results["gemini"] = False
 
