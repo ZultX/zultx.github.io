@@ -379,6 +379,7 @@ def test_providers():
         "messages": [{"role": "user", "content": "hi"}]
       }
       )
+      results["anthropic"] = r.status_code == 200
     except:
         results["anthropic"] = False
 
@@ -388,13 +389,14 @@ def test_providers():
     try:
         key = os.getenv("GOOGLE_API_KEY")
         r = requests.post(
-    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}",
-    json={
-        "contents":[{"parts":[{"text":"hi"}]}]
+           f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}",
+        json={
+          "contents":[{"parts":[{"text":"hi"}]}]
     }
 )
+         results["gemini"] = r.status_code == 200
     except:
-        results["gemini"] = False
+         results["gemini"] = False
 
     return results
 
