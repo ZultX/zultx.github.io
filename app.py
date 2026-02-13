@@ -378,7 +378,7 @@ def test_providers():
                 "max_tokens": 5,
                 "messages": [{"role": "user", "content": "hi"}]
            }
-       )
+        )
 
         results["anthropic"] = r.status_code == 200
     except:
@@ -388,8 +388,10 @@ def test_providers():
     try:
         key = os.getenv("GOOGLE_API_KEY")
         r = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateText?key={key}",
-            json={"prompt":{"text":"hi"}}
+           f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}",
+           json={
+           "contents":[{"parts":[{"text":"hi"}]}]
+           }
         )
         results["gemini"] = r.status_code == 200
     except:
