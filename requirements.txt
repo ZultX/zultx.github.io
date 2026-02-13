@@ -3,3 +3,7 @@ uvicorn[standard]
 requests
 python-multipart
 pinecone-client
+psycopg2-binary
+pinecone-client
+openai
+scikit-learn
