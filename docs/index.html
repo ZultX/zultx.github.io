@@ -762,7 +762,7 @@ async function sendMessage(){
 
     const data = await res.json();
     const ans = (data && data.answer) ? data.answer : "I cannot compute it safely. Is there anything else I can help with?";
-    fakeStream(aiDiv, ans, 9); // 👈 STREAM SPEED
+    fakeStream(aiDiv, ans, 4); // 👈 STREAM SPEED
     saveMessageToHistory(currentConversationId, 'ai', ans);
     
   } catch(err){
