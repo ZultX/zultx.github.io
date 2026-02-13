@@ -398,6 +398,14 @@ def test_providers():
         results["gemini"] = False
 
     return results
+@app.get("/debug/env")
+def debug_env():
+    import os
+    return {
+        "pinecone": os.getenv("PINECONE_API_KEY"),
+        "anthropic": os.getenv("ANTHROPIC_API_KEY"),
+        "gemini": os.getenv("GOOGLE_API_KEY")
+    }
 
 # -------------------------
 # Helper: determine requester identity (JWT or guest session)
