@@ -1,25 +1,26 @@
 # phase_4.py
 """
-ZULTX Phase 4 — Polished memory orchestration (single-file)
+ZULTX Phase 4 — Polished memory orchestration (Postgres + Pinecone)
 - Per-user memory isolation (owner/user_id)
 - Single conversation buffer (recent N messages)
 - STM | CM | LTM | EM with expiries
 - TF-IDF fallback (sklearn optional) or substring fallback
 - Conservative extraction + explicit "remember permanently"
 - Audit logs, retry queue, safe defaults
+- PostgreSQL persistence (primary). Optional SQLite fallback (dev).
+- Optional Pinecone vector storage (CM/LTM) using OpenAI embeddings if configured.
 """
 import os
 import re
 import json
 import time
-import sqlite3
 import uuid
 import math
 import threading
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 
-# Optional dependencies (guarded)
+# Optional dependencies
 SKLEARN_AVAIL = False
 try:
     from sklearn.feature_extraction.text import TfidfVectorizer
@@ -28,41 +29,128 @@ try:
 except Exception:
     SKLEARN_AVAIL = False
 
-# Import phase_3 (reasoning/RAG wrapper)
+# DB adapters
+USE_POSTGRES = bool(os.getenv("DATABASE_URL"))
+DB_URL = os.getenv("DATABASE_URL")
+
+# try postgres driver
+PG_AVAILABLE = False
+if USE_POSTGRES:
+    try:
+        import psycopg2
+        import psycopg2.extras
+        PG_AVAILABLE = True
+    except Exception:
+        PG_AVAILABLE = False
+        print("[phase_4] WARNING: psycopg2 not available; will try SQLite fallback.")
+
+# SQLite fallback if postgres not available
+USE_SQLITE_FALLBACK = not PG_AVAILABLE
+SQLITE_PATH = os.getenv("ZULTX_MEMORY_DB", "zultx_memory.db")
+
+# Pinecone (optional)
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_ENV = os.getenv("PINECONE_ENV")
+PINECONE_INDEX = os.getenv("PINECONE_INDEX")
+USE_PINECONE = bool(PINECONE_API_KEY and PINECONE_INDEX)
+PINECONE_CLIENT = None
+if USE_PINECONE:
+    try:
+        import pinecone
+        pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+        PINECONE_CLIENT = pinecone
+        _pine_index = pinecone.Index(PINECONE_INDEX)
+        print("[phase_4] Pinecone initialized")
+    except Exception as e:
+        print("[phase_4] Pinecone init failed:", e)
+        PINECONE_CLIENT = None
+        USE_PINECONE = False
+
+# Embedding backend (OpenAI optional)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+USE_OPENAI_EMBED = False
+if OPENAI_API_KEY:
+    try:
+        import openai
+        openai.api_key = OPENAI_API_KEY
+        USE_OPENAI_EMBED = True
+    except Exception as e:
+        USE_OPENAI_EMBED = False
+        print("[phase_4] openai import failed:", e)
+
+# phase_3 importer (reasoning/RAG wrapper)
 try:
     from phase_3 import ask as phase3_ask
 except Exception as e:
     phase3_ask = None
     print("[phase_4] WARNING: phase_3.ask not importable:", e)
 
-# CONFIG (tweak via env)
-DB_PATH = os.getenv("ZULTX_MEMORY_DB", "zultx_memory.db")
+# CONFIG (env overrides)
 MAX_INJECT_TOKENS = int(os.getenv("ZULTX_MAX_INJECT_TOKENS", "1200"))
 TFIDF_TOP_K = int(os.getenv("ZULTX_TFIDF_K", "12"))
-
-# Promotion thresholds (safer defaults)
-PROMOTE_TO_CM_SCORE = float(os.getenv("ZULTX_PROMOTE_CM", "0.60"))      # require stronger evidence
+PROMOTE_TO_CM_SCORE = float(os.getenv("ZULTX_PROMOTE_CM", "0.60"))
 PROMOTE_TO_LTM_SCORE = float(os.getenv("ZULTX_PROMOTE_LTM", "0.85"))
 CONFIDENCE_PROMOTE_THRESHOLD = float(os.getenv("ZULTX_CONF_PROMOTE", "0.80"))
-
-# Expiry defaults
 STM_EXPIRE_DAYS = int(os.getenv("ZULTX_STM_DAYS", "1"))
 CM_EXPIRE_DAYS = int(os.getenv("ZULTX_CM_DAYS", "365"))
 LTM_EXPIRE_DAYS = None
 EM_DEFAULT_DAYS = int(os.getenv("ZULTX_EM_DAYS", "7"))
 
-# Basic policy: sensitive patterns (conservative)
+# Sensitive patterns
 SENSITIVE_PATTERNS = [
     re.compile(r"\b\d{10}\b"),  # simple phone number
     re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),  # SSN-like
-    re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"),  # email
+    re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"),
     re.compile(r"\b(?:card(?:-|\s)?num|credit card|visa|mastercard)\b", re.I),
 ]
 
+# Locks
+_db_lock = threading.Lock()
+_CONV_LOCK = threading.Lock()
+
 # ---------------------------
-# SQLite memory store helpers
+# DB Schema for Postgres (and compatible for SQLite fallback)
 # ---------------------------
-_INIT_SQL = f"""
+_POSTGRES_INIT_SQL = """
+CREATE TABLE IF NOT EXISTS memories (
+    id TEXT PRIMARY KEY,
+    owner TEXT,
+    type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    source TEXT,
+    raw_snippet TEXT,
+    created_at TIMESTAMP,
+    last_used TIMESTAMP,
+    expires_at TIMESTAMP,
+    confidence DOUBLE PRECISION,
+    importance DOUBLE PRECISION,
+    frequency INTEGER,
+    memory_score DOUBLE PRECISION,
+    tags JSONB,
+    consent BOOLEAN,
+    metadata JSONB
+);
+
+CREATE INDEX IF NOT EXISTS idx_owner_type_score ON memories (owner, type, memory_score DESC NULLS LAST, last_used DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_expires_at ON memories (expires_at);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    ts TIMESTAMP,
+    action TEXT,
+    mem_id TEXT,
+    payload JSONB
+);
+
+CREATE TABLE IF NOT EXISTS queue_pending (
+    id TEXT PRIMARY KEY,
+    ts TIMESTAMP,
+    payload JSONB
+);
+"""
+
+# SQLite fallback SQL (kept similar to your previous file for dev)
+_SQLITE_INIT_SQL = f"""
 PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
@@ -101,25 +189,8 @@ CREATE TABLE IF NOT EXISTS queue_pending (
 );
 """
 
-_db_lock = threading.Lock()
-
-def get_db_conn(path: str = DB_PATH) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, check_same_thread=False, timeout=30)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def initialize_db():
-    with _db_lock:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.executescript(_INIT_SQL)
-        conn.commit()
-        conn.close()
-
-initialize_db()
-
 # ---------------------------
-# Utilities
+# DB helpers
 # ---------------------------
 def now_ts() -> str:
     return datetime.utcnow().isoformat()
@@ -130,7 +201,10 @@ def parse_ts(ts: Optional[str]) -> Optional[datetime]:
     try:
         return datetime.fromisoformat(ts)
     except Exception:
-        return None
+        try:
+            return datetime.strptime(ts, "%Y-%m-%d %H:%M:%S.%f")
+        except Exception:
+            return None
 
 def uuid4() -> str:
     return str(uuid.uuid4())
@@ -143,42 +217,43 @@ def clamp(v, a=0.0, b=1.0):
     return max(a, min(b, v))
 
 # ---------------------------
-# Memory scoring
+# Postgres connection wrapper (or sqlite fallback)
 # ---------------------------
-def compute_memory_score(importance: float, frequency: int, created_at: Optional[str], confidence: float) -> float:
-    importance = clamp(importance)
-    confidence = clamp(confidence)
-    norm_frequency = min(1.0, math.log2(1 + max(0, frequency)) / 6.0)
-    if created_at:
-        created_dt = parse_ts(created_at)
-        if created_dt:
-            age_days = (datetime.utcnow() - created_dt).total_seconds() / 86400.0
-            recency = 1.0 / (1.0 + (age_days / 7.0))
-        else:
-            recency = 0.5
-    else:
-        recency = 0.5
-    score = (0.40 * importance) + (0.30 * norm_frequency) + (0.20 * recency) + (0.10 * confidence)
-    return clamp(score)
+def get_db_conn():
+    """
+    Returns a DB connection. If Postgres available and DATABASE_URL set, returns psycopg2 connection.
+    Otherwise returns sqlite3 connection (dev fallback).
+    """
+    if PG_AVAILABLE and DB_URL:
+        conn = psycopg2.connect(DB_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        return conn
+    # sqlite fallback
+    import sqlite3
+    conn = sqlite3.connect(SQLITE_PATH, check_same_thread=False, timeout=30)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def initialize_db():
+    with _db_lock:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            if PG_AVAILABLE and DB_URL:
+                # execute postgres init
+                cur.execute(_POSTGRES_INIT_SQL)
+                conn.commit()
+            else:
+                # sqlite fallback
+                cur.executescript(_SQLITE_INIT_SQL)
+                conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+
+initialize_db()
 
 # ---------------------------
-# Policy helpers
-# ---------------------------
-def policy_allow_store(content: str) -> Tuple[bool, Optional[str]]:
-    c = content or ""
-    for p in SENSITIVE_PATTERNS:
-        if p.search(c):
-            return False, "sensitive_pattern"
-    return True, None
-
-def anonymize_if_needed(content: str) -> str:
-    s = content
-    s = re.sub(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "[email]", s)
-    s = re.sub(r"\b\d{10}\b", "[phone]", s)
-    return s
-
-# ---------------------------
-# Simple recall (TF-IDF or substring fallback)
+# Recall index (TF-IDF) - same logic but uses DB rows
 # ---------------------------
 class SimpleRecall:
     def __init__(self):
@@ -187,40 +262,38 @@ class SimpleRecall:
         self.matrix = None
 
     def build_from_db(self):
-        with get_db_conn() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT id, owner, content FROM memories WHERE type IN ('CM','LTM')")
-            rows = cur.fetchall()
-            self.corpus = [(r["id"], r["owner"], r["content"]) for r in rows]
+        rows = []
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            if PG_AVAILABLE and DB_URL:
+                cur.execute("SELECT id, owner, content FROM memories WHERE type IN ('CM','LTM')")
+                rows = cur.fetchall()
+                # psycopg2 with RealDictCursor returns dict-like rows
+                self.corpus = [(r["id"], r["owner"], r["content"]) for r in rows]
+            else:
+                rows = cur.execute("SELECT id, owner, content FROM memories WHERE type IN ('CM','LTM')").fetchall()
+                self.corpus = [(r["id"], r["owner"], r["content"]) for r in rows]
             texts = [t for (_id, _owner, t) in self.corpus]
             if SKLEARN_AVAIL and texts:
-                try:
-                    self.vectorizer = TfidfVectorizer(max_features=50000)
-                    self.matrix = self.vectorizer.fit_transform(texts)
-                except Exception:
-                    self.vectorizer = None
-                    self.matrix = None
+                self.vectorizer = TfidfVectorizer(max_features=50000)
+                self.matrix = self.vectorizer.fit_transform(texts)
             else:
                 self.vectorizer = None
                 self.matrix = None
+        finally:
+            cur.close()
+            conn.close()
 
     def retrieve(self, query: str, k: int = TFIDF_TOP_K, owner: Optional[str] = None) -> List[Tuple[str, str, float]]:
-        """
-        Owner-aware retrieval:
-         - if owner is None: only return global memories (owner IS NULL)
-         - if owner provided: return memories owned by user OR global (owner is NULL)
-        """
         if not self.corpus:
             return []
-        # Filter corpus indices by owner safely
         filtered = []
         for mem_id, mem_owner, content in self.corpus:
             if owner is None:
-                # caller asked for global context
                 if mem_owner is None:
                     filtered.append((mem_id, content))
             else:
-                # owner provided: include mem_owner==owner or global
                 if mem_owner is None or mem_owner == owner:
                     filtered.append((mem_id, content))
         if not filtered:
@@ -229,6 +302,7 @@ class SimpleRecall:
         if self.vectorizer is not None and self.matrix is not None:
             try:
                 qv = self.vectorizer.transform([query])
+                # re-vectorize the filtered texts (safer)
                 fm = self.vectorizer.transform(list(texts))
                 sims = cosine_similarity(qv, fm)[0]
                 idxs = sims.argsort()[::-1][:k]
@@ -261,133 +335,328 @@ def refresh_recall_index():
     except Exception as e:
         audit("recall_index_failed", None, {"err": str(e)})
 
-# run once at startup
+# initial build
 try:
     refresh_recall_index()
 except Exception:
     pass
 
 # ---------------------------
-# DB operations + audit
+# Memory scoring & policy (same as before)
+# ---------------------------
+def compute_memory_score(importance: float, frequency: int, created_at: Optional[str], confidence: float) -> float:
+    importance = clamp(importance)
+    confidence = clamp(confidence)
+    norm_frequency = min(1.0, math.log2(1 + max(0, frequency)) / 6.0)
+    if created_at:
+        created_dt = parse_ts(created_at)
+        if created_dt:
+            age_days = (datetime.utcnow() - created_dt).total_seconds() / 86400.0
+            recency = 1.0 / (1.0 + (age_days / 7.0))
+        else:
+            recency = 0.5
+    else:
+        recency = 0.5
+    score = (0.40 * importance) + (0.30 * norm_frequency) + (0.20 * recency) + (0.10 * confidence)
+    return clamp(score)
+
+def policy_allow_store(content: str) -> Tuple[bool, Optional[str]]:
+    c = content or ""
+    for p in SENSITIVE_PATTERNS:
+        if p.search(c):
+            return False, "sensitive_pattern"
+    return True, None
+
+def anonymize_if_needed(content: str) -> str:
+    s = content
+    s = re.sub(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "[email]", s)
+    s = re.sub(r"\b\d{10}\b", "[phone]", s)
+    return s
+
+# ---------------------------
+# Audit + queue
+# ---------------------------
+def audit(action: str, mem_id: Optional[str], payload: Dict[str, Any]):
+    with _db_lock:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            ts = datetime.utcnow()
+            if PG_AVAILABLE and DB_URL:
+                cur.execute(
+                    "INSERT INTO audit_log (id, ts, action, mem_id, payload) VALUES (%s, %s, %s, %s, %s)",
+                    (uuid4(), ts, action, mem_id, psycopg2.extras.Json(payload))
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO audit_log (id, ts, action, mem_id, payload) VALUES (?, ?, ?, ?, ?)",
+                    (uuid4(), now_ts(), action, mem_id, json.dumps(payload))
+                )
+            conn.commit()
+        except Exception as e:
+            # best-effort logging to stdout
+            print("[phase_4][audit_error]", e)
+        finally:
+            cur.close()
+            conn.close()
+
+def enqueue_retry(item: Dict[str, Any]):
+    with _db_lock:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        try:
+            ts = datetime.utcnow()
+            if PG_AVAILABLE and DB_URL:
+                cur.execute("INSERT INTO queue_pending (id, ts, payload) VALUES (%s, %s, %s)",
+                            (uuid4(), ts, psycopg2.extras.Json(item)))
+            else:
+                cur.execute("INSERT OR REPLACE INTO queue_pending (id, ts, payload) VALUES (?,?,?)",
+                            (uuid4(), now_ts(), json.dumps(item)))
+            conn.commit()
+        except Exception as e:
+            print("[phase_4][enqueue_error]", e)
+        finally:
+            cur.close()
+            conn.close()
+    audit("queue_enqueue", None, {"item": str(item)[:200]})
+
+# ---------------------------
+# CRUD: insert/update/get/list/delete
 # ---------------------------
 def insert_memory(mem: Dict[str, Any]) -> str:
     with _db_lock:
         conn = get_db_conn()
         cur = conn.cursor()
-        cur.execute("""
-            INSERT OR REPLACE INTO memories
-            (id, owner, type, content, source, raw_snippet, created_at, last_used, expires_at,
-             confidence, importance, frequency, memory_score, tags, consent, metadata)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            mem.get("id"),
-            mem.get("owner"),
-            mem.get("type"),
-            mem.get("content"),
-            mem.get("source"),
-            mem.get("raw_snippet"),
-            mem.get("created_at"),
-            mem.get("last_used"),
-            mem.get("expires_at"),
-            float(mem.get("confidence", 0.0)),
-            float(mem.get("importance", 0.0)),
-            int(mem.get("frequency", 1)),
-            float(mem.get("memory_score", 0.0)),
-            json.dumps(mem.get("tags") or []),
-            1 if mem.get("consent") else 0,
-            json.dumps(mem.get("metadata") or {})
-        ))
-        conn.commit()
-        conn.close()
+        try:
+            if PG_AVAILABLE and DB_URL:
+                cur.execute("""
+                    INSERT INTO memories
+                    (id, owner, type, content, source, raw_snippet, created_at, last_used, expires_at,
+                     confidence, importance, frequency, memory_score, tags, consent, metadata)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        content = EXCLUDED.content,
+                        last_used = EXCLUDED.last_used,
+                        frequency = EXCLUDED.frequency,
+                        memory_score = EXCLUDED.memory_score,
+                        tags = EXCLUDED.tags,
+                        metadata = EXCLUDED.metadata
+                """, (
+                    mem.get("id"),
+                    mem.get("owner"),
+                    mem.get("type"),
+                    mem.get("content"),
+                    mem.get("source"),
+                    mem.get("raw_snippet"),
+                    datetime.fromisoformat(mem.get("created_at")) if mem.get("created_at") else None,
+                    datetime.fromisoformat(mem.get("last_used")) if mem.get("last_used") else None,
+                    datetime.fromisoformat(mem.get("expires_at")) if mem.get("expires_at") else None,
+                    float(mem.get("confidence", 0.0)),
+                    float(mem.get("importance", 0.0)),
+                    int(mem.get("frequency", 1)),
+                    float(mem.get("memory_score", 0.0)),
+                    psycopg2.extras.Json(mem.get("tags") or []),
+                    bool(mem.get("consent", True)),
+                    psycopg2.extras.Json(mem.get("metadata") or {})
+                ))
+            else:
+                cur.execute("""
+                    INSERT OR REPLACE INTO memories
+                    (id, owner, type, content, source, raw_snippet, created_at, last_used, expires_at,
+                     confidence, importance, frequency, memory_score, tags, consent, metadata)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    mem.get("id"),
+                    mem.get("owner"),
+                    mem.get("type"),
+                    mem.get("content"),
+                    mem.get("source"),
+                    mem.get("raw_snippet"),
+                    mem.get("created_at"),
+                    mem.get("last_used"),
+                    mem.get("expires_at"),
+                    float(mem.get("confidence", 0.0)),
+                    float(mem.get("importance", 0.0)),
+                    int(mem.get("frequency", 1)),
+                    float(mem.get("memory_score", 0.0)),
+                    json.dumps(mem.get("tags") or []),
+                    1 if mem.get("consent", True) else 0,
+                    json.dumps(mem.get("metadata") or {})
+                ))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+
     audit("create_memory", mem.get("id"), {"owner": mem.get("owner"), "summary": mem.get("content")[:140]})
-    # refresh index asynchronously (cheap)
+    # async refresh
     try:
         threading.Thread(target=refresh_recall_index, daemon=True).start()
     except Exception:
         pass
+
+    # Upsert vector to Pinecone if configured and memory is CM/LTM
+    try:
+        if USE_PINECONE and PINECONE_CLIENT and mem.get("type") in ("CM", "LTM"):
+            # get vector (use openai embeddings if available)
+            text = mem.get("content", "")
+            vec = get_embedding_for_text(text)
+            if vec is not None:
+                _pine_index.upsert([(mem.get("id"), vec, {"owner": mem.get("owner") or None, "type": mem.get("type")})])
+    except Exception as e:
+        audit("pinecone_upsert_failed", mem.get("id"), {"err": str(e)})
+
     return mem.get("id")
 
 def update_memory_last_used(mem_id: str):
     with _db_lock:
         conn = get_db_conn()
         cur = conn.cursor()
-        # fetch current mem
-        cur.execute("SELECT importance, confidence, frequency, created_at FROM memories WHERE id = ?", (mem_id,))
-        row = cur.fetchone()
-        if not row:
+        try:
+            if PG_AVAILABLE and DB_URL:
+                cur.execute("SELECT importance, confidence, frequency, created_at FROM memories WHERE id = %s", (mem_id,))
+                row = cur.fetchone()
+            else:
+                cur.execute("SELECT importance, confidence, frequency, created_at FROM memories WHERE id = ?", (mem_id,))
+                row = cur.fetchone()
+            if not row:
+                return
+            # row may be dict or sqlite Row
+            importance = float(row["importance"] if isinstance(row, dict) else row[0] or 0.5)
+            confidence = float(row["confidence"] if isinstance(row, dict) else row[1] or 0.5)
+            frequency = int(row["frequency"] if isinstance(row, dict) else row[2] or 1) + 1
+            created_at = (row["created_at"] if isinstance(row, dict) else row[3])
+            new_score = compute_memory_score(importance, frequency, created_at, confidence)
+            if PG_AVAILABLE and DB_URL:
+                cur.execute("UPDATE memories SET last_used = %s, frequency = %s, memory_score = %s WHERE id = %s",
+                            (datetime.utcnow(), frequency, new_score, mem_id))
+            else:
+                cur.execute("UPDATE memories SET last_used = ?, frequency = ?, memory_score = ? WHERE id = ?",
+                            (now_ts(), frequency, new_score, mem_id))
+            conn.commit()
+        finally:
+            cur.close()
             conn.close()
-            return
-        importance = float(row["importance"] or 0.5)
-        confidence = float(row["confidence"] or 0.5)
-        frequency = int(row["frequency"] or 1) + 1
-        created_at = row["created_at"]
-        new_score = compute_memory_score(importance, frequency, created_at, confidence)
-        cur.execute("UPDATE memories SET last_used = ?, frequency = ?, memory_score = ? WHERE id = ?", (now_ts(), frequency, new_score, mem_id))
-        conn.commit()
-        conn.close()
     audit("update_last_used", mem_id, {"ts": now_ts(), "frequency": frequency, "memory_score": new_score})
 
 def delete_owner_name_memories(owner: Optional[str]):
     with _db_lock:
         conn = get_db_conn()
         cur = conn.cursor()
-        if owner is None:
-            cur.execute("DELETE FROM memories WHERE content LIKE 'name:%' AND owner IS NULL")
-        else:
-            cur.execute("DELETE FROM memories WHERE content LIKE 'name:%' AND owner = ?", (owner,))
-        conn.commit()
-        conn.close()
+        try:
+            if PG_AVAILABLE and DB_URL:
+                if owner is None:
+                    cur.execute("DELETE FROM memories WHERE content LIKE 'name:%' AND owner IS NULL")
+                else:
+                    cur.execute("DELETE FROM memories WHERE content LIKE 'name:%' AND owner = %s", (owner,))
+            else:
+                if owner is None:
+                    cur.execute("DELETE FROM memories WHERE content LIKE 'name:%' AND owner IS NULL")
+                else:
+                    cur.execute("DELETE FROM memories WHERE content LIKE 'name:%' AND owner = ?", (owner,))
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
     audit("delete_name_memory", None, {"owner": owner})
 
 def get_memory(mem_id: str) -> Optional[Dict[str, Any]]:
-    with get_db_conn() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM memories WHERE id = ?", (mem_id,))
-        row = cur.fetchone()
-        if not row:
-            return None
-        r = dict(row)
-        r["tags"] = json.loads(r["tags"]) if r["tags"] else []
-        r["metadata"] = json.loads(r["metadata"]) if r["metadata"] else {}
-        return r
+    conn = get_db_conn()
+    cur = conn.cursor()
+    try:
+        if PG_AVAILABLE and DB_URL:
+            cur.execute("SELECT * FROM memories WHERE id = %s", (mem_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            r = dict(row)
+            # ensure types for tags/metadata
+            if isinstance(r.get("tags"), str):
+                try:
+                    r["tags"] = json.loads(r["tags"])
+                except Exception:
+                    r["tags"] = []
+            r["tags"] = r.get("tags") or []
+            if isinstance(r.get("metadata"), str):
+                try:
+                    r["metadata"] = json.loads(r["metadata"])
+                except Exception:
+                    r["metadata"] = {}
+            r["metadata"] = r.get("metadata") or {}
+            # convert timestamps to iso
+            for k in ("created_at", "last_used", "expires_at"):
+                if r.get(k) and not isinstance(r.get(k), str):
+                    try:
+                        r[k] = r[k].isoformat()
+                    except Exception:
+                        pass
+            return r
+        else:
+            cur.execute("SELECT * FROM memories WHERE id = ?", (mem_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            r = dict(row)
+            r["tags"] = json.loads(r["tags"]) if r["tags"] else []
+            r["metadata"] = json.loads(r["metadata"]) if r["metadata"] else {}
+            return r
+    finally:
+        cur.close()
+        conn.close()
 
 def list_memories(limit: int = 50, owner: Optional[str] = None) -> List[Dict[str, Any]]:
-    with get_db_conn() as conn:
-        cur = conn.cursor()
-        if owner is None:
-            cur.execute("SELECT * FROM memories ORDER BY memory_score DESC, last_used DESC LIMIT ?", (limit,))
-        else:
-            cur.execute("SELECT * FROM memories WHERE owner = ? ORDER BY memory_score DESC, last_used DESC LIMIT ?", (owner, limit))
-        rows = cur.fetchall()
+    conn = get_db_conn()
+    cur = conn.cursor()
+    try:
         out = []
-        for r in rows:
-            d = dict(r)
-            d["tags"] = json.loads(d["tags"]) if d["tags"] else []
-            d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
-            out.append(d)
-        return out
-
-def audit(action: str, mem_id: Optional[str], payload: Dict[str, Any]):
-    with _db_lock:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute("INSERT INTO audit_log (id, ts, action, mem_id, payload) VALUES (?,?,?,?,?)", (
-            uuid4(), now_ts(), action, mem_id, json.dumps(payload)
-        ))
-        conn.commit()
+        if PG_AVAILABLE and DB_URL:
+            if owner is None:
+                cur.execute("SELECT * FROM memories ORDER BY memory_score DESC NULLS LAST, last_used DESC NULLS LAST LIMIT %s", (limit,))
+            else:
+                cur.execute("SELECT * FROM memories WHERE owner = %s ORDER BY memory_score DESC NULLS LAST, last_used DESC NULLS LAST LIMIT %s", (owner, limit))
+            rows = cur.fetchall()
+            for r in rows:
+                rr = dict(r)
+                if isinstance(rr.get("tags"), str):
+                    try:
+                        rr["tags"] = json.loads(rr["tags"])
+                    except Exception:
+                        rr["tags"] = []
+                rr["tags"] = rr.get("tags") or []
+                if isinstance(rr.get("metadata"), str):
+                    try:
+                        rr["metadata"] = json.loads(rr["metadata"])
+                    except Exception:
+                        rr["metadata"] = {}
+                rr["metadata"] = rr.get("metadata") or {}
+                for k in ("created_at", "last_used", "expires_at"):
+                    if rr.get(k) and not isinstance(rr.get(k), str):
+                        try:
+                            rr[k] = rr[k].isoformat()
+                        except Exception:
+                            pass
+                out.append(rr)
+            return out
+        else:
+            if owner is None:
+                rows = cur.execute("SELECT * FROM memories ORDER BY memory_score DESC, last_used DESC LIMIT ?", (limit,)).fetchall()
+            else:
+                rows = cur.execute("SELECT * FROM memories WHERE owner = ? ORDER BY memory_score DESC, last_used DESC LIMIT ?", (owner, limit)).fetchall()
+            for r in rows:
+                d = dict(r)
+                d["tags"] = json.loads(d["tags"]) if d["tags"] else []
+                d["metadata"] = json.loads(d["metadata"]) if d["metadata"] else {}
+                out.append(d)
+            return out
+    finally:
+        cur.close()
         conn.close()
-
-def enqueue_retry(item: Dict[str, Any]):
-    with _db_lock:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute("INSERT OR REPLACE INTO queue_pending (id, ts, payload) VALUES (?,?,?)", (uuid4(), now_ts(), json.dumps(item)))
-        conn.commit()
-        conn.close()
-    audit("queue_enqueue", None, {"item": str(item)[:200]})
 
 # ---------------------------
-# Extractor (rules + LLM-assist stub)
+# Extractor (same as in your code) - rule-based + LLM stub
 # ---------------------------
 def rule_based_extract(user_input: str, assistant_text: str) -> List[Dict[str, Any]]:
     candidates = []
@@ -429,11 +698,10 @@ def rule_based_extract(user_input: str, assistant_text: str) -> List[Dict[str, A
                 "reason": "preference_statement"
             })
 
-    # name detection (safer): "my name is X" or "i am X"
+    # name detection
     m = re.search(r"\b(?:my name is|i am)\s+([A-Za-z][a-zA-Z]{1,30})\b", text, flags=re.I)
     if m:
         name = m.group(1).strip()
-        # normalize name to title case
         name = name.strip().title()
         candidates.append({
             "content": f"name:{name}",
@@ -446,7 +714,7 @@ def rule_based_extract(user_input: str, assistant_text: str) -> List[Dict[str, A
     return candidates
 
 def llm_assisted_extract_stub(user_input: str, assistant_text: str) -> List[Dict[str, Any]]:
-    # Railway-safe stub
+    # Placeholder for future LLM-assisted extraction (not called to external models here)
     return []
 
 def extract_candidates(user_input: str, assistant_text: str) -> List[Dict[str, Any]]:
@@ -476,7 +744,7 @@ def extract_candidates(user_input: str, assistant_text: str) -> List[Dict[str, A
     return out
 
 # ---------------------------
-# Promotion decision (STM->CM->LTM)
+# Promotion decision
 # ---------------------------
 def decide_storage_for_candidate(candidate: Dict[str, Any]) -> str:
     suggested = candidate.get("suggested_type", "CM")
@@ -498,10 +766,9 @@ def decide_storage_for_candidate(candidate: Dict[str, Any]) -> str:
     return "STM"
 
 # ---------------------------
-# Conversation buffer (single system)
+# Conversation buffer
 # ---------------------------
 _CONV_BUFFERS: Dict[str, List[Dict[str, str]]] = {}
-_CONV_LOCK = threading.Lock()
 CONV_BUFFER_LIMIT = 7
 
 def add_to_conversation_buffer(session_id: str, role: str, content: str):
@@ -525,10 +792,9 @@ def get_recent_chat_block(session_id: str) -> str:
     return "-- RECENT CHAT --\n" + "\n".join(lines) + "\n-- END RECENT CHAT --\n\n"
 
 # ---------------------------
-# Memory retrieval (owner-aware) & injection
+# Retrieval & injection
 # ---------------------------
 def retrieve_relevant_memories(user_input: str, owner: Optional[str], max_tokens_budget: int = MAX_INJECT_TOKENS) -> List[Dict[str, Any]]:
-    # DO NOT rebuild index here (expensive).
     recs = _recall_instance.retrieve(user_input, k=TFIDF_TOP_K, owner=owner)
     out = []
     token_budget = max_tokens_budget
@@ -537,21 +803,18 @@ def retrieve_relevant_memories(user_input: str, owner: Optional[str], max_tokens
         if not mem:
             continue
         mem_owner = mem.get("owner")
-        # owner filter safety: allow mem_owner == owner or mem_owner is None (global)
         if owner is None:
             if mem_owner is not None:
                 continue
         else:
             if mem_owner is not None and mem_owner != owner:
                 continue
-        # discard expired EM
-        if mem["type"] == "EM" and mem.get("expires_at"):
+        if mem.get("type") == "EM" and mem.get("expires_at"):
             exp = parse_ts(mem.get("expires_at"))
             if exp and exp < datetime.utcnow():
                 continue
         if (mem.get("memory_score") or 0.0) < 0.20:
             continue
-        # Skip injecting name memories unless explicit identity query
         if mem["content"].startswith("name:"):
             if not re.search(r'\b(name|who am i|what is my name|my name)\b', user_input.lower()):
                 continue
@@ -579,19 +842,38 @@ def build_memory_injection_block(memories: List[Dict[str, Any]]) -> str:
     for m in memories:
         content = m['content']
         short = (content[:120] + "…") if len(content) > 120 else content
-        # Keep it minimal for the LLM — don't expose internal ids or types
         parts.append(f"- {short}")
     parts.append("-- END INJECTED MEMORIES --\n")
     return "\n".join(parts)
 
 # ---------------------------
-# phase4_ask orchestration (main)
+# Embedding helper (OpenAI)
+# ---------------------------
+def get_embedding_for_text(text: str):
+    if not text:
+        return None
+    # Prefer OpenAI embeddings if available
+    if USE_OPENAI_EMBED:
+        try:
+            # model can be set via env RAG_EMBED_MODEL; default to text-embedding-3-small
+            model = os.getenv("PHASE4_EMBED_MODEL", "text-embedding-3-small")
+            resp = openai.Embedding.create(input=[text], model=model)
+            vec = resp["data"][0]["embedding"]
+            return vec
+        except Exception as e:
+            audit("openai_embed_failed", None, {"err": str(e)})
+            return None
+    # else: no embedding provider configured
+    return None
+
+# ---------------------------
+# Main orchestration (phase4_ask)
 # ---------------------------
 def phase4_ask(user_input: str,
                session_id: Optional[str] = None,
                user_id: Optional[str] = None,
                *,
-               memory_mode: str = "auto",   # auto | manual | off | watch
+               memory_mode: str = "auto",
                persona: Optional[str] = None,
                mode: Optional[str] = None,
                temperature: Optional[float] = None,
@@ -610,29 +892,30 @@ def phase4_ask(user_input: str,
     if session_id:
         add_to_conversation_buffer(session_id, "user", user_input)
 
-    # transient STM passed via kwargs
+    # transient STM via kwargs
     session_stm = _kwargs.get("session_stm") or {}
     stm_block = ""
     if session_stm:
         bullets = [f"{k}: {v}" for k, v in session_stm.items()]
         stm_block = "-- STM --\n" + "\n".join(bullets) + "\n-- END STM --\n\n"
 
-    # decide whether to inject memories
-    inject_memories = []
+    # determine injections
     if memory_mode == "off":
         inject_memories = []
     elif memory_mode == "manual":
         if re.search(r'\b(watch memory|use memory|remember for this|use my memory)\b', user_input, flags=re.I):
             inject_memories = retrieve_relevant_memories(user_input, owner, max_tokens_budget=MAX_INJECT_TOKENS)
+        else:
+            inject_memories = []
     elif memory_mode == "watch":
         inject_memories = retrieve_relevant_memories(user_input, owner, max_tokens_budget=MAX_INJECT_TOKENS)
-    else:  # auto
+    else:
         inject_memories = retrieve_relevant_memories(user_input, owner, max_tokens_budget=MAX_INJECT_TOKENS)
 
     injection = build_memory_injection_block(inject_memories)
     recent_chat_block = get_recent_chat_block(session_id) if session_id else ""
 
-    # Compose final prompt (DO NOT overwrite later)
+    # Prepare prompt parts
     prompt_parts = []
     if persona:
         prompt_parts.append(f"[Persona: {persona}]")
@@ -657,14 +940,13 @@ def phase4_ask(user_input: str,
         except Exception as e2:
             return {"answer": "ZULTX error: reasoning core failed.", "explain": [], "memory_actions": [], "meta": {"latency_ms": int((time.time()-start)*1000), "fallback": True, "error": str(e2)}}
 
-    # normalize answer
     answer_text = phase3_result if isinstance(phase3_result, str) else phase3_result.get("answer") or str(phase3_result)
 
     # append assistant answer to buffer
     if session_id:
         add_to_conversation_buffer(session_id, "assistant", answer_text)
 
-    # 4) Mark used memories last_used/frequency for injected ones
+    # mark used memories
     used_ids = []
     for m in inject_memories:
         try:
@@ -673,10 +955,10 @@ def phase4_ask(user_input: str,
         except Exception:
             pass
 
-    # 5) Extract candidate memories from (user_input, answer_text)
+    # extract candidates
     candidates = extract_candidates(user_input, answer_text)
 
-    # 6) Score & decide writes (owner-aware)
+    # decide writes
     memory_actions = []
     for cand in candidates:
         content = cand["content"]
@@ -702,7 +984,6 @@ def phase4_ask(user_input: str,
                 pass
 
         memory_score = cand.get("memory_score") or compute_memory_score(float(cand.get("importance", 0.5)), 1, created_at, float(cand.get("confidence", 0.5)))
-
         mem_obj = {
             "id": mem_id,
             "owner": mem_owner,
@@ -743,13 +1024,12 @@ def phase4_ask(user_input: str,
             memory_actions.append({"id": None, "action": "queued", "detail": str(e)})
             audit("write_failed", None, {"error": str(e)})
 
-    # 7) Cleanup expired memories (best effort)
+    # cleanup expired memories async
     try:
         threading.Thread(target=cleanup_expired_memories, daemon=True).start()
     except Exception:
         pass
 
-    # 8) Explain block
     explain = []
     for m in inject_memories:
         explain.append({"id": m["id"], "content": m["content"], "why": m["why_matched"], "type": m["type"], "owner": m.get("owner")})
@@ -770,14 +1050,17 @@ def cleanup_expired_memories():
     with _db_lock:
         conn = get_db_conn()
         cur = conn.cursor()
-        now = now_ts()
         try:
-            cur.execute("DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at < ?", (now,))
-            deleted = cur.rowcount
+            if PG_AVAILABLE and DB_URL:
+                cur.execute("DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at < %s", (datetime.utcnow(),))
+                deleted = cur.rowcount
+            else:
+                now = now_ts()
+                cur.execute("DELETE FROM memories WHERE expires_at IS NOT NULL AND expires_at < ?", (now,))
+                deleted = cur.rowcount
             conn.commit()
             if deleted:
                 audit("cleanup_expired", None, {"deleted": deleted})
-                # refresh index after deletions to avoid ghost recalls
                 try:
                     refresh_recall_index()
                 except Exception:
@@ -785,14 +1068,14 @@ def cleanup_expired_memories():
         except Exception as e:
             audit("cleanup_failed", None, {"error": str(e)})
         finally:
+            cur.close()
             conn.close()
 
 # ---------------------------
-# CLI for testing
+# CLI for testing (same behavior)
 # ---------------------------
 if __name__ == "__main__":
-    print("ZULTX phase_4 polished tester")
-    # index built at startup already
+    print("ZULTX phase_4 (Postgres + Pinecone) tester")
     while True:
         try:
             ui = input("\nYou: ").strip()
@@ -806,7 +1089,7 @@ if __name__ == "__main__":
                 rows = list_memories(50, owner)
                 for r in rows:
                     owner_label = (r['owner'][:8] if r['owner'] else 'GLOBAL')
-                    print(f"{r['id'][:8]} owner={owner_label} {r['type']} score={r['memory_score'] or 0:.3f} freq={r['frequency']} content={r['content'][:80]}")
+                    print(f"{r['id'][:8]} owner={owner_label} {r['type']} score={r.get('memory_score') or 0:.3f} freq={r.get('frequency')} content={r['content'][:80]}")
                 continue
             if ui.lower().startswith("forget "):
                 target = ui.split(" ", 1)[1].strip()
@@ -815,15 +1098,18 @@ if __name__ == "__main__":
                     with _db_lock:
                         conn = get_db_conn()
                         cur = conn.cursor()
-                        cur.execute("DELETE FROM memories WHERE id = ?", (target,))
+                        if PG_AVAILABLE and DB_URL:
+                            cur.execute("DELETE FROM memories WHERE id = %s", (target,))
+                        else:
+                            cur.execute("DELETE FROM memories WHERE id = ?", (target,))
                         conn.commit()
+                        cur.close()
                         conn.close()
                     print("Deleted memory", target)
                     continue
                 print("No memory by that id; use listmem to inspect")
                 continue
 
-            # simulate session "cli_session" and user "cli_user"
             res = phase4_ask(ui, session_id="cli_session", user_id="cli_user", memory_mode="auto")
             print("\nZultX:", res["answer"])
             if res.get("explain"):
