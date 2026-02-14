@@ -384,6 +384,42 @@ html.dark .msg.ai p code {
   color: #000;
   }
 
+/* === THINKING ORBS ANIMATION === */
+.thinking-orbs{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:16px;
+  margin:18px 0;
+  height:40px;
+}
+
+.orb{
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  animation: orbit 1.2s linear infinite;
+}
+
+.fire{
+  background: radial-gradient(circle at 30% 30%, #ffcc70, #ff3b3b);
+}
+
+.water{
+  background: radial-gradient(circle at 30% 30%, #6ee7ff, #2563eb);
+  animation-delay: 0.2s;
+}
+
+.nature{
+  background: radial-gradient(circle at 30% 30%, #86efac, #15803d);
+  animation-delay: 0.4s;
+}
+
+@keyframes orbit{
+  0%   { transform: translateY(0px) scale(1); }
+  50%  { transform: translateY(-10px) scale(1.2); }
+  100% { transform: translateY(0px) scale(1); }
+  }
 
 /* temp chats list */
 .temp-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
@@ -470,6 +506,11 @@ html.dark .msg.ai p code {
     <!-- chat area (hidden initially) -->
     <div id="chatArea" class="chat-wrap" style="display:none" aria-live="polite"></div>
 
+    <div id="thinkingOrbs" class="thinking-orbs" style="display:none;">
+     <div class="orb fire"></div>
+     <div class="orb water"></div>
+     <div class="orb nature"></div>
+    </div>
     <!-- compose -->
     <div class="compose">
       <textarea id="input" placeholder="Ask ZultX something positive..." rows="1" aria-label="Your message"></textarea>
@@ -713,14 +754,13 @@ function enhanceCodeBlocks(container){
   
 /* -------------- SEND MESSAGE (no stream) -------------- */
 async function sendMessage(){
+
   const text = input.value.trim();
   if(!text) return;
 
-  // ensure chat visible
   centerScreen.style.display = 'none';
   chatArea.style.display = 'flex';
 
-  // create conversation if missing
   if(!currentConversationId){
     currentConversationId = makeConvoId();
     localSaveInit(currentConversationId);
@@ -730,50 +770,58 @@ async function sendMessage(){
   input.value = '';
   sendBtn.disabled = true;
 
-  // insert temporary AI bubble
-  const aiDiv = document.createElement('div');
-  aiDiv.className = 'msg ai';
-  aiDiv.textContent = 'ZultX is thinking deep..';
-  chatArea.appendChild(aiDiv);
-  chatArea.scrollTo({ top: chatArea.scrollHeight, behavior: "smooth" });
+  const orbs = document.getElementById("thinkingOrbs");
+  orbs.style.display = "flex";
+
+  const startTime = Date.now();
 
   try{
-    // call non-stream endpoint; always returns JSON { answer: "..." }
     const token = getToken();
     const sessionId = ensureSessionId();
     const headers = {
-     "Accept": "application/json",
-     "X-Session-Id": sessionId
+      "Accept": "application/json",
+      "X-Session-Id": sessionId
     };
-    if(token){
-     headers["Authorization"] = "Bearer " + token;
-    }
+    if(token) headers["Authorization"] = "Bearer " + token;
 
     const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, {
-    method: "GET",
-    headers: headers
+      method: "GET",
+      headers: headers
     });
 
-    if(!res.ok){
-      aiDiv.textContent = "⚠️ Server error — Make sure connection is working.";
-      saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
-      return;
-    }
-
     const data = await res.json();
-    const ans = (data && data.answer) ? data.answer : "I cannot compute it safely. Is there anything else I can help with?";
-    fakeStream(aiDiv, ans, 3); // 👈 STREAM SPEED
-    saveMessageToHistory(currentConversationId, 'ai', ans);
-    
+    const answer = (data && data.answer) ? data.answer : "I cannot compute it safely.";
+
+    // ⏳ Ensure minimum 3 seconds orb time
+    const elapsed = Date.now() - startTime;
+    const remaining = Math.max(0, 3000 - elapsed);
+
+    setTimeout(() => {
+
+      orbs.style.display = "none";
+
+      // show AI bubble AFTER orbs
+      const aiDiv = document.createElement('div');
+      aiDiv.className = 'msg ai';
+      aiDiv.textContent = "ZultX is thinking deep..";
+      chatArea.appendChild(aiDiv);
+
+      // slight micro delay before streaming
+      setTimeout(() => {
+        fakeStream(aiDiv, answer, 3);
+        saveMessageToHistory(currentConversationId, 'ai', answer);
+      }, 800);
+
+    }, remaining);
+
   } catch(err){
-    console.error(err);
-    aiDiv.textContent = "⚠️ Connection failed - Check your network.";
-    saveMessageToHistory(currentConversationId, 'ai', aiDiv.textContent);
+    orbs.style.display = "none";
+    addAiMsg("⚠️ Connection error.");
   } finally {
     sendBtn.disabled = false;
-    refreshHistoryList();
   }
-}
+  }
+
 
 /* -------------- OPEN / NEW CONVERSATION -------------- */
 startBtn.addEventListener('click', ()=> {
