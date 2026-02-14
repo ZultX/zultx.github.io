@@ -32,12 +32,9 @@ except Exception:
 
 # Try optional external ask functions (phase_4 preferred)
 ASK_FUNC = None
-try:
     from phase4 import phase4_ask as ask_func
     ASK_FUNC = ask_func
     print("[ZULTX] Using phase_4.phase4_ask")
-except Exception:
-    print("ERROR:", Exception)
 
 # -------------------------
 # Configs & DB paths
