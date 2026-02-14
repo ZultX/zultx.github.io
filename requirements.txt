@@ -1,9 +1,9 @@
 fastapi
 uvicorn[standard]
 requests
-python-multipart
-pinecone-client
 psycopg2-binary
-pinecone
-openai
 scikit-learn
+numpy
+sentence-transformers
+openai==0.28.1
+pinecone-client==2.2.4
