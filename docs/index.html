@@ -418,7 +418,7 @@ html.dark .msg.ai p code {
   <div class="header-actions">
     <div id="themeToggle" class="top-tip" title="Toggle light / dark"><span id="themeIcon">🌗</span></div>
     <div id="topTipBtn" class="top-tip"><span>🍏</span><strong style="margin-left:6px">Tip</strong></div>
-    <div id="lettersBtn" style="padding:8px 10px;border-radius:10px;background:var(--glass);cursor:pointer">✉️ Letters</div>
+    <div id="lettersBtn" style="padding:8px 10px;border-radius:10px;background:var(--glass);cursor:pointer">✉️ Letter</div>
     <div id="shareBtn" class="top-tip" title="Share ZultX"><span>🔗</span><strong style="margin-left:6px">Share</strong></div>
 
 
@@ -431,7 +431,7 @@ html.dark .msg.ai p code {
       </svg>
     </div>
 
-    <div class="version-badge">v1.4</div>
+    <div class="version-badge">v1.4.4</div>
   </div>
 </header>
 
@@ -439,7 +439,7 @@ html.dark .msg.ai p code {
   <aside class="side">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div><strong>ZultX</strong><div class="small-muted">Your AI Assistant</div></div>
-      <div class="small-muted">USER</div>
+      <div class="small-muted">user</div>
     </div>
 
     <h3 style="margin-top:6px">Your Chats</h3>
@@ -702,7 +702,7 @@ function enhanceCodeBlocks(container){
 
   btn.onclick = () => {
     navigator.clipboard.writeText(block.innerText);
-    btn.textContent = 'Copied ✅';
+    btn.textContent = 'Copied';
     setTimeout(() => btn.textContent = 'Copy', 1500);
   };
 
@@ -762,7 +762,7 @@ async function sendMessage(){
 
     const data = await res.json();
     const ans = (data && data.answer) ? data.answer : "I cannot compute it safely. Is there anything else I can help with?";
-    fakeStream(aiDiv, ans, 4); // 👈 STREAM SPEED
+    fakeStream(aiDiv, ans, 3); // 👈 STREAM SPEED
     saveMessageToHistory(currentConversationId, 'ai', ans);
     
   } catch(err){
@@ -1066,7 +1066,7 @@ chatArea.style.display = 'none';
     <div class="premium-form" id="premiumFormArea">
       <input id="p_username" placeholder="Username" />
       <input id="p_email" placeholder="Email (signup only)" style="display:none;" />
-      <div style="position:relative; display:flex; gap:8px; align-items:center;">
+      <div style="position:relative; min-height: 100vh; display:flex; gap:8px; align-items:center;">
         <input id="p_password" type="password" placeholder="Password" style="flex:1;" />
         <button id="p_eye" class="pw-eye" title="Show/Hide password">👁️</button>
       </div>
