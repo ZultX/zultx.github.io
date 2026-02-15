@@ -275,12 +275,25 @@ html.dark .msg.ai pre{
 .msg{
   transition: transform .15s ease, box-shadow .15s ease;
 }
+@media (max-width:600px){
+  .modal{
+    left:4%;
+    right:4%;
+    top:8%;
+    bottom:8%;
+  }
 
-.msg:hover{
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  .modal.sm{
+    width:auto;
+    left:6%;
+    right:6%;
+  }
+
+  .premium-card{
+    padding:18px;
+  }
 }
- 
+
 /* Inline code – green and readable */
 .msg.ai p code {
   background: rgba(34,197,94,0.15);
@@ -375,6 +388,9 @@ html.dark .msg.ai p code {
 .premium-header { display:flex;justify-content:space-between;align-items:center;gap:12px; }
 .premium-title { font-size:28px;font-weight:900;color:var(--accent-strong); }
 .premium-sub { color:var(--muted); font-size:14px; }
+body{
+  padding-bottom: env(safe-area-inset-bottom);
+}
 
 /* form */
 .premium-form { margin-top:18px; display:flex;flex-direction:column; gap:12px; }
@@ -390,6 +406,12 @@ html.dark .msg.ai p code {
 
 /* eye toggle button */
 .pw-eye { background:transparent;border:none;color:var(--accent-strong); cursor:pointer; padding:8px;border-radius:8px; }
+@media (max-width:600px){
+  .msg{
+    max-width:92%;
+    font-size:15.5px;
+  }
+}
 
 /* left-panel account line styling */
 .side .account-row { padding:8px 10px; margin-bottom:12px; display:flex;justify-content:space-between;align-items:center; border-radius:8px; background:rgba(255,255,255,0.01); }
@@ -417,6 +439,23 @@ html.dark .msg.ai p code {
 }
 .msg.ai{
   animation: bubbleIn 0.25s ease-out;
+}
+@media (max-width:600px){
+  :root{
+    --header-h:58px;
+  }
+
+  header{
+    padding:8px 12px;
+  }
+
+  .logo{
+    font-size:17px;
+  }
+
+  .version-badge{
+    display:none;
+  }
 }
 
 @keyframes bubbleIn{
@@ -461,6 +500,18 @@ html.dark .msg.ai p code {
   font-weight:800;
 }
 
+@media (max-width:880px){
+  .side{
+    position:fixed;
+    transform:translateX(-100%);
+    transition: transform .3s ease;
+    z-index:10000;
+  }
+
+  .side.open{
+    transform:translateX(0);
+  }
+}
 
 #premiumClose:hover {
   background: #f3d36b;
@@ -474,14 +525,25 @@ html.dark .msg.ai p code {
   margin:6px 0 6px 8px;
   height:26px;
 }
+@media (max-width:600px){
+  .compose{
+    position:sticky;
+    bottom:0;
+    background:var(--bg);
+    padding:10px;
+  }
 
-.ai-pulse{
-  width:16px;
-  height:16px;
-  border-radius:50%;
-  background:#111; /* dark premium */
-  animation: pulse 1.2s ease-in-out infinite;
+  .chat-wrap{
+    padding-bottom:90px;
+  }
 }
+@media (hover:hover){
+  .msg:hover{
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  }
+}
+
 
 html.light .ai-pulse{
   background:#222;
@@ -586,9 +648,7 @@ html.light .ai-pulse{
 
     <!-- chat area (hidden initially) -->
     <div id="chatArea" class="chat-wrap" style="display:none" aria-live="polite"></div>
-     <div id="thinkingOrbs" class="thinking-orbs" style="display:none;">
-     <div class="ai-pulse"></div>
-    </div>
+    <div id="mobileMenuBtn" class="top-tip">☰</div>
     <!-- compose -->
     <div class="compose">
       <textarea id="input" placeholder="Ask ZultX something positive..." rows="1" aria-label="Your message"></textarea>
@@ -724,7 +784,7 @@ function fakeStream(element, fullText, speed = 15) {
     if (i < fullText.length) {
       element.textContent += fullText[i];
       i++;
-      element.scrollIntoView({ behavior: "smooth", block: "end" });
+      chatArea.scrollTop = chatArea.scrollHeight;
       setTimeout(type, speed);
     } else {
       element.innerHTML = marked.parse(fullText);
@@ -847,8 +907,6 @@ async function sendMessage(){
   input.value = '';
   sendBtn.disabled = true;
 
-  const orbs = document.getElementById("thinkingOrbs");
-  orbs.style.display = "flex";
   let aiDiv = document.createElement('div');
   aiDiv.className = 'msg ai thinking';
   chatArea.appendChild(aiDiv);
@@ -1174,6 +1232,10 @@ input.addEventListener("keydown", function(e) {
     sendMessage();
   }
 
+});
+input.addEventListener('input', ()=>{
+  input.style.height = "auto";
+  input.style.height = input.scrollHeight + "px";
 });
 
 
