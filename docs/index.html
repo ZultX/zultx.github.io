@@ -782,23 +782,9 @@ async function sendMessage(){
   const orbs = document.getElementById("thinkingOrbs");
   orbs.style.display = "flex";
 
-  let aiDiv = null;
-  let thinkingShown = false;
-  let responseReceived = false;
-
-  // 🔥 SHOW ORBS MAX 4 SECONDS
-  const orbTimer = setTimeout(() => {
-    if(responseReceived) return; // response already arrived
-
-    orbs.style.display = "none";
-
-    aiDiv = document.createElement('div');
-    aiDiv.className = 'msg ai';
-    aiDiv.textContent = "ZultX is thinking deep...";
-    chatArea.appendChild(aiDiv);
-
-    thinkingShown = true;
-  }, 4000);
+  let aiDiv = document.createElement('div');
+  aiDiv.className = 'msg ai';
+  chatArea.appendChild(aiDiv);
 
   try{
     const token = getToken();
@@ -811,35 +797,34 @@ async function sendMessage(){
 
     if(token) headers["Authorization"] = "Bearer " + token;
 
+    // ⚡ Start timer (for debugging real speed)
+    const startTime = performance.now();
+
     const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, {
       method: "GET",
       headers: headers
     });
 
     const data = await res.json();
+
+    const endTime = performance.now();
+    console.log("⚡ Real response time:", ((endTime - startTime)/1000).toFixed(2), "sec");
+
     const answer = (data && data.answer)
       ? data.answer
       : "I cannot compute it safely.";
 
-    responseReceived = true;
-    clearTimeout(orbTimer);
+    // 🔥 STOP ORBS IMMEDIATELY WHEN RESPONSE ARRIVES
     orbs.style.display = "none";
 
-    // If thinking message never appeared (fast backend)
-    if(!thinkingShown){
-      aiDiv = document.createElement('div');
-      aiDiv.className = 'msg ai';
-      chatArea.appendChild(aiDiv);
-    }
+    // Stream answer instantly
+    fakeStream(aiDiv, answer, 2);
 
-    // Replace thinking text smoothly
-    fakeStream(aiDiv, answer, 3);
     saveMessageToHistory(currentConversationId, 'ai', answer);
 
   } catch(err){
-    clearTimeout(orbTimer);
     orbs.style.display = "none";
-    addAiMsg("⚠️ Connection error.");
+    aiDiv.textContent = "⚠️ Connection error.";
   } finally {
     sendBtn.disabled = false;
   }
