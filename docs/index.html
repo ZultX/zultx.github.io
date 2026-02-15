@@ -384,52 +384,40 @@ html.dark .msg.ai p code {
   color: #000;
   }
 
-/* === THINKING ORBS GOD MODE === */
 .thinking-orbs{
   display:flex;
   align-items:center;
-  gap:8px;
-  margin:6px 0 6px 8px; /* slightly left */
-  height:26px;
   justify-content:flex-start;
+  margin:6px 0 6px 8px;
+  height:26px;
 }
 
-.orb{
-  width:14px;
-  height:14px;
+.ai-pulse{
+  width:16px;
+  height:16px;
   border-radius:50%;
-  animation: orbit 1.2s linear infinite;
+  background:#111; /* dark premium */
+  animation: pulse 1.2s ease-in-out infinite;
 }
 
-/* Optional premium fade */
-.msg.ai {
-  animation: fadeIn .25s ease-in;
+html.light .ai-pulse{
+  background:#222;
 }
 
-@keyframes fadeIn{
-  from { opacity:0; transform: translateY(4px); }
-  to { opacity:1; transform: translateY(0); }
-}
-
-.fire{
-  background: radial-gradient(circle at 30% 30%, #ffcc70, #ff3b3b);
-}
-
-.water{
-  background: radial-gradient(circle at 30% 30%, #6ee7ff, #2563eb);
-  animation-delay: 0.2s;
-}
-
-.nature{
-  background: radial-gradient(circle at 30% 30%, #86efac, #15803d);
-  animation-delay: 0.4s;
-}
-
-@keyframes orbit{
-  0%   { transform: translateY(0px) scale(1); }
-  50%  { transform: translateY(-10px) scale(1.2); }
-  100% { transform: translateY(0px) scale(1); }
+@keyframes pulse{
+  0%{
+    transform: scale(1);
+    opacity: 0.6;
   }
+  50%{
+    transform: scale(1.4);
+    opacity: 1;
+  }
+  100%{
+    transform: scale(1);
+    opacity: 0.6;
+  }
+}
 
 /* temp chats list */
 .temp-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
@@ -515,11 +503,8 @@ html.dark .msg.ai p code {
 
     <!-- chat area (hidden initially) -->
     <div id="chatArea" class="chat-wrap" style="display:none" aria-live="polite"></div>
-
-    <div id="thinkingOrbs" class="thinking-orbs" style="display:none;">
-     <div class="orb fire"></div>
-     <div class="orb water"></div>
-     <div class="orb nature"></div>
+     <div id="thinkingOrbs" class="thinking-orbs" style="display:none;">
+     <div class="ai-pulse"></div>
     </div>
     <!-- compose -->
     <div class="compose">
