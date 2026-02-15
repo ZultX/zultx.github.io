@@ -783,13 +783,12 @@ async function sendMessage(){
   orbs.style.display = "flex";
 
   let aiDiv = null;
+  let thinkingShown = false;
   let responseReceived = false;
-  let thinkingInserted = false;
 
-  // 🔥 AFTER 5 SECONDS → HIDE ORBS → SHOW THINKING TEXT
+  // 🔥 SHOW ORBS MAX 4 SECONDS
   const orbTimer = setTimeout(() => {
-
-    if(responseReceived) return;
+    if(responseReceived) return; // response already arrived
 
     orbs.style.display = "none";
 
@@ -798,12 +797,10 @@ async function sendMessage(){
     aiDiv.textContent = "ZultX is thinking deep...";
     chatArea.appendChild(aiDiv);
 
-    thinkingInserted = true;
-
-  }, 5000); // 5 seconds
+    thinkingShown = true;
+  }, 4000);
 
   try{
-
     const token = getToken();
     const sessionId = ensureSessionId();
 
@@ -828,13 +825,14 @@ async function sendMessage(){
     clearTimeout(orbTimer);
     orbs.style.display = "none";
 
-    // If backend fast (before 5 sec)
-    if(!thinkingInserted){
+    // If thinking message never appeared (fast backend)
+    if(!thinkingShown){
       aiDiv = document.createElement('div');
       aiDiv.className = 'msg ai';
       chatArea.appendChild(aiDiv);
     }
 
+    // Replace thinking text smoothly
     fakeStream(aiDiv, answer, 3);
     saveMessageToHistory(currentConversationId, 'ai', answer);
 
@@ -846,6 +844,7 @@ async function sendMessage(){
     sendBtn.disabled = false;
   }
 }
+
 
 
 
