@@ -792,6 +792,17 @@ function animateThinkingLogs(aiDiv, logs, callback){
   typeLine();
 }
 
+function waitForResponseAndLogs(aiDiv, getResponse){
+  const checkInterval = setInterval(() => {
+    const response = getResponse();
+    if(response){
+      clearInterval(checkInterval);
+      aiDiv.innerHTML = "";
+      fakeStream(aiDiv, response, 3);
+    }
+  }, 200);
+}
+
 /* -------------- SEND MESSAGE (no stream) -------------- */
 async function sendMessage(){
   const text = input.value.trim();
@@ -812,75 +823,64 @@ async function sendMessage(){
   const orbs = document.getElementById("thinkingOrbs");
   orbs.style.display = "flex";
 
-  let aiDiv = null;
   let responseData = null;
+  let aiDiv = null;
+  let logsFinished = false;
+
+  // 🔥 START FETCH IMMEDIATELY
+  const fetchPromise = (async () => {
+    try{
+      const token = getToken();
+      const sessionId = ensureSessionId();
+
+      const headers = {
+        "Accept": "application/json",
+        "X-Session-Id": sessionId
+      };
+
+      if(token) headers["Authorization"] = "Bearer " + token;
+
+      const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, {
+        method: "GET",
+        headers: headers
+      });
+
+      const data = await res.json();
+      responseData = (data && data.answer)
+        ? data.answer
+        : "I cannot compute it safely.";
+
+    } catch(err){
+      responseData = "⚠️ Connection error.";
+    }
+  })();
 
   // 🔥 5 SEC ORBS
-  const orbTimer = setTimeout(() => {
+  setTimeout(() => {
 
     orbs.style.display = "none";
 
     aiDiv = document.createElement('div');
     aiDiv.className = 'msg ai';
-    aiDiv.textContent = "ZultX is thinking deep...";
     chatArea.appendChild(aiDiv);
 
-    // 🔥 AFTER 2 SEC → SHOW LOGS
-    setTimeout(() => {
+    const fakeLogs = [
+      "Analyzing user intent...",
+      "Checking memory context...",
+      "Understanding conversation depth...",
+      "Generating structured response..."
+    ];
 
-      aiDiv.innerHTML = ""; // clear thinking text
-
-      const fakeLogs = [
-        "Analyzing user intent...",
-        "Checking memory context...",
-        "Understanding conversation depth...",
-        "Generating structured response..."
-      ];
-
-      animateThinkingLogs(aiDiv, fakeLogs, () => {
-
-        // After logs complete → show real answer
-        if(responseData){
-          aiDiv.innerHTML = "";
-          fakeStream(aiDiv, responseData, 3);
-          saveMessageToHistory(currentConversationId, 'ai', responseData);
-        }
-
-      });
-
-    }, 2000);
+    animateThinkingLogs(aiDiv, fakeLogs, () => {
+      logsFinished = true;
+      waitForResponseAndLogs(aiDiv, () => responseData);
+    });
 
   }, 5000);
 
-  try{
+  await fetchPromise;
 
-    const token = getToken();
-    const sessionId = ensureSessionId();
-
-    const headers = {
-      "Accept": "application/json",
-      "X-Session-Id": sessionId
-    };
-
-    if(token) headers["Authorization"] = "Bearer " + token;
-
-    const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, {
-      method: "GET",
-      headers: headers
-    });
-
-    const data = await res.json();
-    responseData = (data && data.answer)
-      ? data.answer
-      : "I cannot compute it safely.";
-
-  } catch(err){
-    clearTimeout(orbTimer);
-    orbs.style.display = "none";
-    addAiMsg("⚠️ Connection error.");
-  } finally {
-    sendBtn.disabled = false;
-  }
+  sendBtn.disabled = false;
 }
 
 
