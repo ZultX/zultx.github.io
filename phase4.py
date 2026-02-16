@@ -84,6 +84,15 @@ try:
 except Exception as e:
     phase3_ask = None
     print("[phase_4] WARNING: phase_3.ask not importable:", e)
+    
+from psycopg2.pool import SimpleConnectionPool
+
+PG_POOL = None
+if PG_AVAILABLE and DB_URL:
+    PG_POOL = SimpleConnectionPool(
+        1, 10,  # min, max connections
+        DB_URL
+    )
 
 # CONFIG (env overrides)
 MAX_INJECT_TOKENS = int(os.getenv("ZULTX_MAX_INJECT_TOKENS", "1200"))
@@ -220,18 +229,13 @@ def clamp(v, a=0.0, b=1.0):
 # Postgres connection wrapper (or sqlite fallback)
 # ---------------------------
 def get_db_conn():
-    """
-    Returns a DB connection. If Postgres available and DATABASE_URL set, returns psycopg2 connection.
-    Otherwise returns sqlite3 connection (dev fallback).
-    """
-    if PG_AVAILABLE and DB_URL:
-        conn = psycopg2.connect(DB_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-        return conn
-    # sqlite fallback
+    if PG_POOL:
+        return PG_POOL.getconn()
     import sqlite3
     conn = sqlite3.connect(SQLITE_PATH, check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def initialize_db():
     with _db_lock:
@@ -283,7 +287,11 @@ class SimpleRecall:
                 self.matrix = None
         finally:
             cur.close()
-            conn.close()
+            if PG_POOL:
+               PG_POOL.putconn(conn)
+            else:
+               conn.close()
+
 
     def retrieve(self, query: str, k: int = TFIDF_TOP_K, owner: Optional[str] = None) -> List[Tuple[str, str, float]]:
         if not self.corpus:
@@ -850,21 +858,20 @@ def build_memory_injection_block(memories: List[Dict[str, Any]]) -> str:
 # Embedding helper (OpenAI)
 # ---------------------------
 def get_embedding_for_text(text: str):
-    if not text:
+    if not text or not USE_OPENAI_EMBED:
         return None
-    # Prefer OpenAI embeddings if available
-    if USE_OPENAI_EMBED:
-        try:
-            # model can be set via env RAG_EMBED_MODEL; default to text-embedding-3-small
-            model = os.getenv("PHASE4_EMBED_MODEL", "text-embedding-3-small")
-            resp = openai.Embedding.create(input=[text], model=model)
-            vec = resp["data"][0]["embedding"]
-            return vec
-        except Exception as e:
-            audit("openai_embed_failed", None, {"err": str(e)})
-            return None
-    # else: no embedding provider configured
-    return None
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        model = os.getenv("PHASE4_EMBED_MODEL", "text-embedding-3-small")
+        resp = client.embeddings.create(
+            model=model,
+            input=text
+        )
+        return resp.data[0].embedding
+    except Exception as e:
+        audit("embed_failed", None, {"err": str(e)})
+        return None
 
 # ---------------------------
 # Main orchestration (phase4_ask)
