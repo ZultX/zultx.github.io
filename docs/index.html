@@ -8,6 +8,8 @@
 <meta name="robots" content="index, follow" />
 <meta name="google-site-verification" content="ZPjCIwA1WKlXdH9n68BLts7CbCRwKlmwgymRsyWMawU" />
 <link rel="canonical" href="https://zultx.github.io/ZultX-v2/" />
+<link rel="preconnect" href="https://zultx.up.railway.app">
+<link rel="dns-prefetch" href="https://zultx.up.railway.app">
 <link rel="icon" href="favicon.ico" type="image/x-icon">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
@@ -906,11 +908,12 @@ function enhanceCodeBlocks(container){
 async function sendMessage(){
   const text = input.value.trim();
   if(!text) return;
-
+  
   centerScreen.style.display = 'none';
   chatArea.style.display = 'flex';
   console.log("Send clicked");
-  
+  const start = performance.now();
+
   if(!currentConversationId){
     currentConversationId = makeConvoId();
     localSaveInit(currentConversationId);
@@ -936,9 +939,13 @@ async function sendMessage(){
 
     if(token) headers["Authorization"] = "Bearer " + token;
 
-    const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, {
-      method: "GET",
-      headers: headers
+    const res = await fetch(`${API_BASE}/ask`, {
+       method: "POST",
+       headers: {
+         ...headers,
+         "Content-Type": "application/json"
+       },
+       body: JSON.stringify({ q: text })
     });
 
     if(!res.ok){
@@ -949,7 +956,10 @@ async function sendMessage(){
     const answer = data?.answer || "No response.";
 
     aiDiv.classList.remove("thinking");
-    fakeStream(aiDiv, answer, 2);
+    fakeStream(aiDiv, answer, 0);
+    console.log("Backend time:",
+      ((performance.now() - start)/1000).toFixed(2) + "s"
+    );
 
     saveMessageToHistory(currentConversationId, 'ai', answer);
 
