@@ -944,6 +944,12 @@ async function sendMessage(){
     };
 
     if(token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(
+      `${API_BASE}/ask?q=${encodeURIComponent(text)}`,
+      {
+         method: "GET"
+      }
+    );
 
     const res = await fetch(`${API_BASE}/ask`, {
        method: "POST",
