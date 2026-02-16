@@ -255,6 +255,24 @@ initialize_db()
 # ---------------------------
 # Recall index (TF-IDF) - same logic but uses DB rows
 # ---------------------------
+def load_recent_messages(owner: str, limit: int = 10):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT role, content
+        FROM conversations
+        WHERE owner = %s
+        ORDER BY ts DESC
+        LIMIT %s
+    """, (owner, limit))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    # Reverse because we selected DESC
+    rows.reverse()
+    return [{"role": r[0], "content": r[1]} for r in rows]
+
 class SimpleRecall:
     def __init__(self):
         self.vectorizer = None
@@ -775,7 +793,7 @@ def add_to_conversation_buffer(session_id: str, role: str, content: str):
     if not session_id:
         return
     with _CONV_LOCK:
-        buf = _CONV_BUFFERS.get(session_id) or []
+        buf = load_recent_messages(owner)
         buf.append({"role": role, "content": content, "ts": now_ts()})
         if len(buf) > CONV_BUFFER_LIMIT:
             buf = buf[-CONV_BUFFER_LIMIT:]
