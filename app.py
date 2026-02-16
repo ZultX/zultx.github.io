@@ -432,7 +432,9 @@ async def ask_get(
     max_tokens: int = Query(512), 
     memory_mode: str = Query("auto")
     ): 
-      if not q or not q.strip(): raise HTTPException(status_code=400, detail="Missing query")
+    
+    if not q or not q.strip(): raise HTTPException(status_code=400, detail="Missing query")
+    
     try:
         # extract owner (user or guest) and session_id
         owner, session_id = extract_user_and_session(request)
