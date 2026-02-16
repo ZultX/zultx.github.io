@@ -557,8 +557,7 @@ html.light .ai-pulse{
 /* temp chats list */
 .temp-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .temp-entry{padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center}
-/* responsive */
-@media (max-width:880px){ .side{display:none} .main{margin-left:0} .center-inner{padding:8px} .suggest-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))} }
+
 </style>
   
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -899,13 +898,8 @@ async function sendMessage(){
 
   let aiDiv = document.createElement('div');
   aiDiv.className = 'msg ai thinking';
-  chatArea.appendChild(aiDiv);
-
   aiDiv.innerHTML = `<div class="ai-pulse"></div>`;
-
-  setTimeout(()=>{
-    aiDiv.classList.add("fast");
-  }, 1800);
+  chatArea.appendChild(aiDiv);
 
   try{
     const token = getToken();
@@ -915,41 +909,28 @@ async function sendMessage(){
       "Accept": "application/json",
       "X-Session-Id": sessionId
     };
+
     if(token) headers["Authorization"] = "Bearer " + token;
 
-    const startTime = performance.now();
-
-    const res = await fetch(`${API_BASE}/ask`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...headers
-      },
-      body: JSON.stringify({ q: text })
+    const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, {
+      method: "GET",
+      headers: headers
     });
 
+    if(!res.ok){
+      throw new Error("Server error");
+    }
+
     const data = await res.json();
-
-    const endTime = performance.now();
-    console.log("⚡ Real response time:", ((endTime - startTime)/1000).toFixed(2), "sec");
-
-    const answer = data?.answer || "I cannot compute it safely.";
+    const answer = data?.answer || "No response.";
 
     aiDiv.classList.remove("thinking");
-
-    aiDiv.style.opacity = "0.6";
-
-    setTimeout(()=>{
-      aiDiv.innerHTML = marked.parse(answer);
-      aiDiv.querySelectorAll("pre code").forEach(b => hljs.highlightElement(b));
-      enhanceCodeBlocks(aiDiv);
-      aiDiv.style.opacity = "1";
-      chatArea.scrollTop = chatArea.scrollHeight;
-    }, 120);
+    fakeStream(aiDiv, answer, 2);
 
     saveMessageToHistory(currentConversationId, 'ai', answer);
 
   } catch(err){
+    console.error(err);
     aiDiv.textContent = "⚠️ Connection error.";
   } finally {
     sendBtn.disabled = false;
