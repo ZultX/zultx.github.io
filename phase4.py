@@ -1129,7 +1129,7 @@ def phase4_ask(user_input: str,
                **_kwargs) -> Dict[str, Any]:
     start = time.time()
     # owner here is the identity string (could be user id or 'guest:<sid>')
-    owner = user_id if user_id else None
+    owner = user_id if user_id else (f"guest:{session_id}" if session_id else None)
 
     # debug
     try:
