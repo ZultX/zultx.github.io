@@ -1056,11 +1056,11 @@ def retrieve_relevant_memories(user_input: str, owner: Optional[str], max_tokens
             continue
         mem_owner = mem.get("owner")
         if owner is None:
-            if mem_owner is not None:
-                continue
+          return []  # no cross-session memory
         else:
-            if mem_owner is not None and mem_owner != owner:
-                continue
+          if mem_owner is not None and mem_owner != owner: 
+             continue
+        
         if mem.get("type") == "EM" and mem.get("expires_at"):
             exp = parse_ts(mem.get("expires_at"))
             if exp and exp < datetime.utcnow():
@@ -1124,7 +1124,10 @@ def phase4_ask(user_input: str,
                timeout: int = 30,
                **_kwargs) -> Dict[str, Any]:
     start = time.time()
-    owner = user_id if user_id is not None else session_id
+    owner = user_id
+    if not user_id:
+        owner = None  # no persistent memory
+
     if phase3_ask is None:
         return {"answer": "[phase_3 missing] Core unavailable.", "explain": [], "memory_actions": [], "meta": {"latency_ms": int((time.time()-start)*1000), "fallback": True}}
 
@@ -1191,12 +1194,12 @@ def phase4_ask(user_input: str,
 
     # mark used memories (update last_used)
     used_ids = []
-    for m in inject_memories:
-        try:
-            update_memory_last_used(m["id"])
-            used_ids.append(m["id"])
-        except Exception:
-            pass
+    for m in inject_memories[:2]:
+    threading.Thread(
+        target=update_memory_last_used,
+        args=(m["id"],),
+        daemon=True
+    ).start()
 
     # extract and store candidate memories (non-blocking writes)
     candidates = extract_candidates(user_input, answer_text)
