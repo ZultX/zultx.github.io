@@ -1,10 +1,10 @@
 # app.py
 """
-ZULTX — app with GREEN-PROTOCOL (SQLite auth + JWT + guest session support)
+ZULTX — app with GREEN-PROTOCOL (Postgres auth + JWT + guest session support)
+- Requires DATABASE_URL env var (Postgres). No fallback — app will fail fast if DB unavailable.
 - Signup / Login (password hashing: bcrypt if available, fallback PBKDF2)
 - JWT created/verified with HMAC-SHA256 (no external JWT lib required)
 - /ask uses JWT user identity (if present) otherwise uses guest session_id
-- Trial mode supported (no login required)
 """
 import os
 import glob
@@ -13,9 +13,8 @@ import time
 import hmac
 import base64
 import hashlib
-import sqlite3
 import traceback
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Query, Body, HTTPException, Request, Header
@@ -24,37 +23,55 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import urllib.parse
 
-# External modules optional: bcrypt (faster) - fallback to PBKDF2 if not installed
+# -------------------------
+# Required: psycopg2 (no fallback)
+# -------------------------
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is required (no fallback). Set DATABASE_URL to your Postgres/Supabase URL.")
+
+try:
+    import psycopg2
+    import psycopg2.extras
+    from psycopg2.pool import SimpleConnectionPool
+except Exception as e:
+    raise RuntimeError("psycopg2 is required. Install with `pip install psycopg2-binary`") from e
+
+# Optional bcrypt
 try:
     import bcrypt  # type: ignore
     BCRYPT_AVAIL = True
 except Exception:
     BCRYPT_AVAIL = False
 
-# Try optional external ask functions (phase_4 preferred)
+# Prefer phase_4 if available, then fall back to phase_3
 ASK_FUNC = None
 try:
-        from phase_3 import ask as ask_func
-        ASK_FUNC = ask_func
-        print("[ZULTX] Using phase_3.ask()")
+    from phase_4 import phase4_ask as phase4_ask_func
+    ASK_FUNC = phase4_ask_func
+    print("[ZULTX] Using phase_4.phase4_ask()")
 except Exception as e:
-        print("[ZULTX] phase_4 ask() found, using internal fallback. Error:", e)
+    try:
+        from phase_3 import ask as phase3_ask
+        ASK_FUNC = phase3_ask
+        print("[ZULTX] Using phase_3.ask()")
+    except Exception as e2:
         ASK_FUNC = None
+        print("[ZULTX] No external ask() found, using local fallback.")
+
 # -------------------------
-# Configs & DB paths
+# Configs & other paths
 # -------------------------
 BASE_DIR = os.getcwd()
-USERS_DB = os.getenv("ZULTX_USERS_DB", "users.db")
 LETTERS_DIR = os.getenv("ZULTX_LETTERS_DIR", "letters")
 JWT_SECRET = os.getenv("ZULTX_JWT_SECRET", "dev-secret")
 JWT_EXP_SECONDS = int(os.getenv("ZULTX_JWT_EXP_SECONDS", 60 * 60 * 24 * 7))  # 7 days
 
-# Ensure folders
 os.makedirs(LETTERS_DIR, exist_ok=True)
 os.makedirs("feedback", exist_ok=True)
 os.makedirs("tips", exist_ok=True)
 
-# default letter
+# default letter if missing
 example_path = os.path.join(LETTERS_DIR, "real.txt")
 if not os.path.exists(example_path):
     with open(example_path, "w", encoding="utf-8") as f:
@@ -63,7 +80,7 @@ if not os.path.exists(example_path):
 # -------------------------
 # FastAPI init
 # -------------------------
-app = FastAPI(title="ZULTX — v1.4 (auth)")
+app = FastAPI(title="ZULTX — v1.4")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -72,40 +89,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# serve static if present (optional)
 if os.path.isdir("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# -------------------------
+# Postgres pool & init (fail-fast)
+# -------------------------
+# Small pool; tune via env if necessary
+PG_POOL_MIN = int(os.getenv("PG_POOL_MIN", "1"))
+PG_POOL_MAX = int(os.getenv("PG_POOL_MAX", "6"))
 
-# -------------------------
-# Users DB helpers
-# -------------------------
-_INIT_USERS_SQL = """
-PRAGMA journal_mode=WAL;
+try:
+    PG_POOL = SimpleConnectionPool(PG_POOL_MIN, PG_POOL_MAX, DATABASE_URL)
+except Exception as e:
+    raise RuntimeError(f"Failed to create Postgres connection pool: {e}") from e
+
+def _get_conn():
+    """Get a connection from the pool (caller must put it back with _put_conn)."""
+    try:
+        conn = PG_POOL.getconn()
+        return conn
+    except Exception as e:
+        raise RuntimeError(f"Failed to acquire DB connection: {e}") from e
+
+def _put_conn(conn):
+    try:
+        PG_POOL.putconn(conn)
+    except Exception:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+# Schema - users + conversations (safe, non-destructive)
+_INIT_SQL = """
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    username TEXT UNIQUE,
+    username TEXT UNIQUE NOT NULL,
     email TEXT,
-    password_hash TEXT,
-    created_at TEXT
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_user_username ON users (username);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id BIGSERIAL PRIMARY KEY,
+    session_id TEXT,
+    user_id TEXT,
+    role TEXT,
+    content TEXT,
+    created_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_conv_session_ts ON conversations (session_id, created_at DESC);
 """
 
-def get_users_conn():
-    conn = sqlite3.connect(USERS_DB, check_same_thread=False, timeout=30)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def initialize_users_db():
-    conn = get_users_conn()
+def initialize_db():
+    conn = _get_conn()
     cur = conn.cursor()
-    cur.executescript(_INIT_USERS_SQL)
-    conn.commit()
-    conn.close()
+    try:
+        cur.execute(_INIT_SQL)
+        conn.commit()
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        # Fail fast — app should not run without DB
+        raise RuntimeError(f"Failed to initialize DB schema: {e}") from e
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        _put_conn(conn)
 
-initialize_users_db()
+# run init on import; crash on failures
+initialize_db()
 
 # -------------------------
 # Password hashing helpers
@@ -115,14 +176,13 @@ def hash_password(password: str) -> str:
         salt = bcrypt.gensalt()
         ph = bcrypt.hashpw(password.encode("utf-8"), salt)
         return ph.decode("utf-8")
-    # fallback PBKDF2 - store as iterations$salt$hex
     salt = base64.urlsafe_b64encode(os.urandom(16)).decode("utf-8")
     iterations = 200_000
     dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), iterations)
     return f"pbkdf2${iterations}${salt}${dk.hex()}"
 
 def verify_password(password: str, stored: str) -> bool:
-    if stored.startswith("$2b$") or stored.startswith("$2a$") or stored.startswith("$2y$"):  # bcrypt
+    if stored.startswith("$2b$") or stored.startswith("$2a$") or stored.startswith("$2y$"):
         if not BCRYPT_AVAIL:
             return False
         try:
@@ -140,13 +200,12 @@ def verify_password(password: str, stored: str) -> bool:
     return False
 
 # -------------------------
-# Simple JWT (HMAC-SHA256)
+# JWT helpers (same logic)
 # -------------------------
 def _b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("utf-8")
 
 def _b64u_decode(s: str) -> bytes:
-    # pad
     s2 = s + "=" * ((4 - len(s) % 4) % 4)
     return base64.urlsafe_b64decode(s2.encode("utf-8"))
 
@@ -179,43 +238,65 @@ def verify_jwt(token: str, secret: str) -> Optional[dict]:
         return None
 
 # -------------------------
-# Auth helpers
+# Auth helpers (Postgres-backed)
 # -------------------------
 def create_user(username: str, password: str, email: Optional[str] = None) -> dict:
     uid = base64.urlsafe_b64encode(os.urandom(9)).decode("utf-8")
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.utcnow()
     ph = hash_password(password)
-    conn = get_users_conn()
-    cur = conn.cursor()
+    conn = _get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute("INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?,?,?,?,?)",
-                    (uid, username, email, ph, created_at))
+        cur.execute(
+            "INSERT INTO users (id, username, email, password_hash, created_at) VALUES (%s, %s, %s, %s, %s)",
+            (uid, username, email, ph, created_at)
+        )
         conn.commit()
-    except sqlite3.IntegrityError as e:
-        conn.close()
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
         raise ValueError("username_taken")
-    conn.close()
-    return {"id": uid, "username": username, "email": email, "created_at": created_at}
+    except Exception as e:
+        conn.rollback()
+        raise
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        _put_conn(conn)
+    return {"id": uid, "username": username, "email": email, "created_at": created_at.isoformat()}
 
 def get_user_by_username(username: str) -> Optional[dict]:
-    conn = get_users_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE username = ?", (username,))
-    row = cur.fetchone()
-    conn.close()
-    if not row:
-        return None
-    return dict(row)
+    conn = _get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return dict(row)
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        _put_conn(conn)
 
 def get_user_by_id(uid: str) -> Optional[dict]:
-    conn = get_users_conn()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE id = ?", (uid,))
-    row = cur.fetchone()
-    conn.close()
-    if not row:
-        return None
-    return dict(row)
+    conn = _get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM users WHERE id = %s", (uid,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return dict(row)
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
+        _put_conn(conn)
 
 def token_for_user(user_row: dict) -> str:
     payload = {"sub": user_row["id"], "username": user_row["username"]}
@@ -278,7 +359,7 @@ def me(authorization: Optional[str] = Header(None)):
     return JSONResponse({"authenticated": True, "user": {"id": user["id"], "username": user["username"], "email": user["email"]}})
 
 # -------------------------
-# Existing site endpoints (letters, tip, feedback etc.)
+# Letters / tip / feedback endpoints (unchanged)
 # -------------------------
 @app.get("/", response_class=HTMLResponse)
 def index():
@@ -335,16 +416,16 @@ def tip(payload: dict = Body(...)):
     return JSONResponse({"ok": True, "order": order, "upi_link": upi_uri, "qr": qr_url})
 
 # -------------------------
-# Helper: determine requester identity (JWT or guest session)
+# Identity extraction helper
 # -------------------------
-def extract_user_and_session(request: Request) -> (Optional[str], Optional[str]):
+def extract_user_and_session(request: Request) -> Tuple[Optional[str], Optional[str]]:
     """
-    Returns (user_id_or_none, session_id_or_none)
+    Returns (owner_user_id_or_guest, session_id_or_none)
     Priority:
-      - If Authorization Bearer token present and valid => user_id (from token), session_id MAY still be provided for convo buffer.
-      - If no token: session_id from query or headers is used to create guest owner id "guest:<session_id>".
+      - Bearer JWT => owner = user_id (sub)
+      - else session_id => owner = 'guest:<session_id>'
+      - else owner = None (no persistent memory)
     """
-    # prefer Authorization header
     auth = request.headers.get("authorization") or request.headers.get("Authorization")
     user_id = None
     if auth:
@@ -354,27 +435,16 @@ def extract_user_and_session(request: Request) -> (Optional[str], Optional[str])
             if payload and payload.get("sub"):
                 user_id = payload.get("sub")
 
-    # session id
-    # client may pass session_id as query param or header X-Session-Id
     query_session = request.query_params.get("session_id")
     header_session = request.headers.get("x-session-id")
     session_id = query_session or header_session or None
 
-    # if no token -> we create guest owner id based on session_id
-    owner = None
-    if user_id:
-        owner = user_id
-    else:
-        if session_id:
-            owner = f"guest:{session_id}"
-        else:
-            owner = None
+    owner = user_id if user_id else (f"guest:{session_id}" if session_id else None)
     return owner, session_id
 
 # -------------------------
-# Normalizer reused from your original app but slightly improved
+# Local fallback ask
 # -------------------------
-import asyncio
 def local_fallback_ask_plain(user_input: str) -> str:
     base = (user_input or "").strip().lower()
     if any(word in base for word in ("sad", "depressed", "unhappy", "down")):
@@ -386,20 +456,17 @@ def local_fallback_ask_plain(user_input: str) -> str:
                 "If you want, tell me more — I'm here to listen.")
     return f"Hey. I heard: \"{user_input}\". Be kind to yourself — tell me more and I'll help."
 
+import asyncio
 async def normalize_result_to_text(result: Any) -> str:
     if result is None:
         return local_fallback_ask_plain("")
-
     if asyncio.iscoroutine(result):
         try:
             result = await result
         except Exception:
             return str(result)
-
-    # If it's a dict and has 'answer' prefer that
     if isinstance(result, dict) and "answer" in result:
         return str(result.get("answer") or "")
-
     if hasattr(result, "__aiter__"):
         parts = []
         try:
@@ -408,7 +475,6 @@ async def normalize_result_to_text(result: Any) -> str:
         except Exception:
             pass
         return "".join(parts)
-
     if hasattr(result, "__iter__") and not isinstance(result, (str, bytes, dict)):
         parts = []
         try:
@@ -417,29 +483,27 @@ async def normalize_result_to_text(result: Any) -> str:
         except Exception:
             pass
         return "".join(parts)
-
     return str(result)
 
 # -------------------------
-# Protected ask endpoint (uses identity extraction)
+# Protected ask endpoint — uses ASK_FUNC if available (phase_4 preferred)
 # -------------------------
-@app.get("/ask") 
+@app.get("/ask")
 async def ask_get(
-    request: Request, 
-    q: str = Query(..., alias="q"), 
-    mode: str = Query("friend"), 
-    temperature: Optional[float] = Query(None), 
-    max_tokens: int = Query(512), 
+    request: Request,
+    q: str = Query(..., alias="q"),
+    mode: str = Query("friend"),
+    temperature: Optional[float] = Query(None),
+    max_tokens: int = Query(512),
     memory_mode: str = Query("auto")
-    ): 
-    
-    if not q or not q.strip(): raise HTTPException(status_code=400, detail="Missing query")
-    
+):
+    if not q or not q.strip():
+        raise HTTPException(status_code=400, detail="Missing query")
+
     try:
-        # extract owner (user or guest) and session_id
         owner, session_id = extract_user_and_session(request)
 
-        # Build kwargs for ASK_FUNC/phase4_ask
+        # Build kwargs to match phase4_ask signature (it expects user_input, session_id, user_id, ...)
         kwargs = {
             "user_input": q,
             "session_id": session_id,
@@ -452,15 +516,18 @@ async def ask_get(
         }
 
         if ASK_FUNC is not None:
+            # try direct call with kwargs, else fallback to other common signatures
             try:
-                # call directly
                 result = ASK_FUNC(**kwargs)
             except TypeError:
-                # fallback positional
                 try:
+                    # maybe phase_3: ask(q, session_id, owner, stream=False)
                     result = ASK_FUNC(q, session_id, owner, False)
                 except Exception:
-                    result = ASK_FUNC(q)
+                    try:
+                        result = ASK_FUNC(q)
+                    except Exception as e:
+                        raise
         else:
             result = local_fallback_ask_plain(q)
 
