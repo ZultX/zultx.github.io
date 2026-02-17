@@ -47,7 +47,7 @@ except Exception:
 # Prefer phase_4 if available, then fall back to phase_3
 ASK_FUNC = None
 try:
-    from phase_4 import phase4_ask as phase4_ask_func
+    from phase4 import phase4_ask as phase4_ask_func
     ASK_FUNC = phase4_ask_func
     print("[ZULTX] Using phase_4.phase4_ask()")
 except Exception as e:
