@@ -199,7 +199,21 @@ html.light .msg.ai{background:linear-gradient(180deg,#f7f7f7,#efefef);color:var(
 .small-muted{font-size:12px;color:var(--muted)}
 
 /* modals */
-.modal{display:none;position:fixed;left:8%;top:10%;right:8%;bottom:10%;background:var(--card-bg);border-radius:12px;padding:18px;z-index:10030;overflow:auto;border:1px solid rgba(255,255,255,0.04)}
+.modal{
+  display:none;
+  position:fixed;
+  top:50%;
+  left:50%;
+  transform:translate(-50%, -50%);
+  width:min(90vw, 700px);
+  max-height:85vh;
+  overflow:auto;
+  background:var(--card-bg);
+  border-radius:16px;
+  padding:22px;
+  z-index:15000;
+  border:1px solid rgba(255,255,255,0.05);
+}
 .modal.sm{width:420px;left:calc(50% - 210px);right:auto}
 #shareBtn:hover{
   box-shadow:0 0 16px rgba(255,215,0,0.25);
@@ -371,17 +385,21 @@ html.dark .msg.ai p code {
   }
 
 /* Premium full-screen modal (golden) */
-.premium-modal {
+.premium-modal{
   display:none;
   position:fixed;
   inset:0;
   background: linear-gradient(180deg, rgba(12,8,6,0.94), rgba(16,12,10,0.96));
-  z-index:12000;
+  z-index:20000;
   align-items:center;
   justify-content:center;
   padding:28px;
   backdrop-filter: blur(8px);
 }
+.premium-modal.active{
+  display:flex;
+}
+  
 .premium-card {
   width:100%;
   max-width:920px;
@@ -473,7 +491,7 @@ body{
   from{
     transform: translateY(6px);
     opacity:0;
-  }
+  } k
   to{
     transform: translateY(0);
     opacity:1;
@@ -578,7 +596,63 @@ html.light .ai-pulse{
     left:0;
   }
 }
+@media (max-width:768px){
 
+  header{
+    background:transparent;
+    box-shadow:none;
+    border:none;
+  }
+
+  .logo,
+  .small-muted,
+  .version-badge{
+    display:none;
+  }
+
+  .header-actions{
+    width:100%;
+    justify-content:space-between;
+  }
+
+  .top-tip strong{
+    display:none;
+  }
+
+  .top-tip{
+    padding:6px 10px;
+    font-size:14px;
+  }
+
+  #mobileMenuBtn{
+    display:flex !important;
+  }
+
+  .side{
+    width:260px;
+  }
+
+  .main{
+    margin-left:0;
+  }
+
+  .center-title{
+    font-size:22px;
+  }
+
+  .suggest-card{
+    padding:14px;
+    font-size:15px;
+  }
+
+  .compose{
+    padding:10px;
+  }
+
+  .compose textarea{
+    font-size:15px;
+  }
+      }
 /* temp chats list */
 .temp-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .temp-entry{padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center}
@@ -1348,9 +1422,14 @@ function openPremium(mode='login'){
   P_USERNAME.value = '';
   P_PASSWORD.value = '';
   PREMIUM_AUTH.style.display = 'flex';
+  PREMIUM_AUTH.classList.add("active");
   document.body.style.overflow = 'hidden';
 }
-function closePremium(){ PREMIUM_AUTH.style.display = 'none'; document.body.style.overflow = ''; }
+function closePremium(){
+  PREMIUM_AUTH.classList.remove("active");
+  document.body.style.overflow = '';
+  }
+
 
 P_CLOSE.onclick = closePremium;
 P_TOGGLE.onclick = () => openPremium(premiumMode === 'signup' ? 'login' : 'signup');
