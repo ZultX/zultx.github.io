@@ -529,19 +529,6 @@ body{
   font-weight:800;
 }
 
-@media (max-width:880px){
-  .side{
-    position:fixed;
-    transform:translateX(-100%);
-    transition: transform .3s ease;
-    z-index:10000;
-  }
-
-  .side.open{
-    transform:translateX(0);
-  }
-}
-
 #premiumClose:hover {
   background: #f3d36b;
   color: #000;
@@ -653,6 +640,12 @@ html.light .ai-pulse{
     font-size:15px;
   }
       }
+
+.header-actions > *{
+  backdrop-filter:blur(6px);
+  border:1px solid rgba(255,215,0,0.08);
+  }
+
 /* temp chats list */
 .temp-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .temp-entry{padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center}
@@ -673,7 +666,7 @@ html.light .ai-pulse{
  href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 
 </head>
-<body class="dark">
+<body>
 <header>
   <div style="display:flex;gap:12px;align-items:center">
     <div class="logo">
@@ -1318,6 +1311,12 @@ input.addEventListener('input', ()=>{
   input.style.height = input.scrollHeight + "px";
 });
 
+const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+const sidePanel = document.querySelector(".side");
+
+mobileMenuBtn.addEventListener("click", ()=>{
+  sidePanel.classList.toggle("open");
+});
 
 /* init: ensure conversation exists */
 if(!currentConversationId){
