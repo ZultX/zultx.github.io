@@ -556,7 +556,11 @@ body{
   50%{ transform: scale(1.35); opacity:1; }
   100%{ transform: scale(1); opacity:0.6; }
 }
-
+@media (max-width:768px){
+  .logo{
+    display:none;
+  }
+      }
 /* Premium Close Button Override */
 #premiumClose {
   background: linear-gradient(90deg,#ffffff,#fff6cc);
@@ -666,6 +670,9 @@ html.light .ai-pulse{
   .compose textarea{
     font-size:15px;
   }
+  .header-actions{
+  display:none;
+  }
       }
 
 .header-actions > *{
@@ -767,7 +774,12 @@ html.light .side .convo-item{
 
     <h3 style="margin-top:6px">Your Chats</h3>
     <div id="historyList" aria-live="polite"></div>
-
+    <div id="mobileActions" class="mobile-only" style="display:flex;gap:10px;margin-bottom:14px;">
+      <div id="sideTempBtn" class="top-tip">🌓</div>
+      <div id="sideLettersBtn" class="top-tip">✉️</div>
+      <div id="sideTipBtn" class="top-tip">🍏</div>
+      <div id="sideShareBtn" class="top-tip">🔗</div>
+    </div>
     <div style="height:12px"></div>
     <div class="menu-btn" id="newChatBtn">+ New chat</div>
     <div style="height:14px"></div>
@@ -871,13 +883,25 @@ const themeIcon = document.getElementById("themeIcon");
 let currentConversationId = null;
 let tempMode = false; // if true, don't save to local history
 let longPressTimer = null;
-
+document.getElementById("sideLettersBtn").onclick = () => lettersBtn.click();
+document.getElementById("sideTipBtn").onclick = () => topTipBtn.click();
+document.getElementById("sideShareBtn").onclick = () => shareBtn.click();
+document.getElementById("sideTempBtn").onclick = () => tempChatBtn.click();
+  
 /* -------------- HISTORY STORAGE -------------- */
 function updateTempIconVisibility(){
   const hasMessages = chatArea.querySelector(".msg");
+  const logo = document.querySelector(".logo");
+
   if(hasMessages){
     tempChatBtn.style.display = "none";
+    if(window.innerWidth <= 768){
+      logo.style.display = "flex";
+    }
   }else{
+    if(window.innerWidth <= 768){
+      logo.style.display = "none";
+    }
     tempChatBtn.style.display = "flex";
   }
   }
