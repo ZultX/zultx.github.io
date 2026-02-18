@@ -172,14 +172,49 @@ html.light .msg.user{background:linear-gradient(180deg,#fff,#fbfbfb);color:var(-
 html.light .msg.ai{background:linear-gradient(180deg,#f7f7f7,#efefef);color:var(--text);border-left:4px solid var(--accent)}
 
 /* compose area */
-.compose{padding:12px;border-top:1px solid rgba(255,255,255,0.03);display:flex;gap:8px;align-items:center;background:linear-gradient(180deg,transparent,var(--bg))}
-.compose textarea{flex:1;background:transparent;border:1px solid rgba(255,255,255,0.04);padding:12px;border-radius:12px;color:var(--text);min-height:46px;resize:none}
-.compose button{background:var(--accent-strong);border:none;padding:10px 16px;border-radius:10px;font-weight:800;cursor:pointer;color:#0a0a0a}
+.compose{
+  position:sticky;
+  bottom:0;
+  padding:14px;
+  background:var(--bg);
+  display:flex;
+  justify-content:center;
+  z-index:50;
+}
+
+.compose-inner{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  max-width:820px;
+  background:rgba(255,255,255,0.06);
+  border-radius:999px;
+  padding:6px 10px;
+  backdrop-filter:blur(10px);
+}
+
+.compose textarea{
+  flex:1;
+  background:transparent;
+  border:none;
+  padding:10px;
+  border-radius:999px;
+  min-height:40px;
+  resize:none;
+}
+
 .compose textarea:focus{
   outline:none;
-  border:1px solid var(--accent-strong);
-  box-shadow: 0 0 0 3px rgba(255,215,0,0.08);
+  box-shadow:none;
 }
+
+.compose button{
+  border-radius:999px;
+  padding:8px 16px;
+}
+
+
 @media (min-width:1600px){
   .premium-card{
     max-width:1100px;
@@ -560,14 +595,6 @@ body{
   }
 }
 
-.premium-modal{
-  pointer-events:none;
-}
-
-.premium-modal[style*="flex"]{
-  pointer-events:auto;
-}
-
 html.light .ai-pulse{
   background:#222;
 }
@@ -669,6 +696,8 @@ html.light .ai-pulse{
 <body>
 <header>
   <div style="display:flex;gap:12px;align-items:center">
+    <div id="mobileMenuBtn" class="top-tip mobile-only">☰</div>
+  <div style="display:flex;gap:12px;align-items:center">
     <div class="logo">
       <span class="fire">Zult</span><span class="x-black">X</span>
     </div>
@@ -680,7 +709,6 @@ html.light .ai-pulse{
     <div id="topTipBtn" class="top-tip"><span>🍏</span><strong style="margin-left:6px">Tip</strong></div>
     <div id="lettersBtn" style="padding:8px 10px;border-radius:10px;background:var(--glass);cursor:pointer">✉️ Letter</div>
     <div id="shareBtn" class="top-tip" title="Share ZultX"><span>🔗</span><strong style="margin-left:6px">Share</strong></div>
-    <div id="mobileMenuBtn" class="top-tip mobile-only">☰</div>
 
 
     <!-- temp chat 3/4 circle icon -->
@@ -732,11 +760,11 @@ html.light .ai-pulse{
     <div id="chatArea" class="chat-wrap" style="display:none" aria-live="polite"></div>
     <!-- compose -->
     <div class="compose">
-      <textarea id="input" placeholder="Ask ZultX something positive..." rows="1" aria-label="Your message"></textarea>
-      <button id="sendBtn">Send</button>
+        <div class="compose-inner">
+          <textarea id="input" placeholder="Ask ZultX something positive..." rows="1"></textarea>
+          <button id="sendBtn">Send</button>
+        </div>
     </div>
-  </main>
-</div>
 
 <!-- Letters modal -->
 <div id="lettersModal" class="modal sm" aria-hidden="true">
