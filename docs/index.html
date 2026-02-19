@@ -139,6 +139,38 @@ html.dark header{
 @media (max-width:880px){
   .mobile-only{ display:inline-flex; }
 }
+.side-actions{
+  display:flex;
+  gap:10px;
+  margin:14px 0 18px 0;
+  flex-wrap:wrap;
+}
+
+.side-btn{
+  width:42px;
+  height:42px;
+  border-radius:12px;
+  background:rgba(255,255,255,0.06);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  font-size:18px;
+  transition:.2s ease;
+  backdrop-filter:blur(6px);
+}
+
+.side-btn:hover{
+  background:rgba(255,255,255,0.15);
+  transform:translateY(-2px);
+}
+html.light .side-btn{
+  background:#f0f0f0;
+}
+
+html.light .side-btn:hover{
+  background:#e2e2e2;
+}
 
 /* center initial screen with suggestion cards */
 .center-screen{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);padding:40px}
@@ -745,13 +777,6 @@ html.light .side .convo-item{
     <div class="small-muted" style="font-weight:700">ZultX — v1.4</div>
   </div>
 
-  <div class="header-actions">
-    <div id="themeToggle" class="top-tip" title="Toggle light / dark"><span id="themeIcon">🌗</span></div>
-    <div id="topTipBtn" class="top-tip"><span>🍏</span><strong style="margin-left:6px">Tip</strong></div>
-    <div id="lettersBtn" class="top-tip" title="Letters">✉️</div>
-    <div id="shareBtn" class="top-tip" title="Share ZultX"><span>🔗</span><strong style="margin-left:6px">Share</strong></div>
-
-
     <!-- temp chat 3/4 circle icon -->
     <div id="tempChatBtn" class="temp-chat-icon" title="Temporary chats">
       <!-- simple 3/4 circle SVG -->
@@ -767,20 +792,21 @@ html.light .side .convo-item{
 
 <div class="app">
   <aside class="side">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div class="side-actions">
+      <div id="sideTemp" class="side-btn">🌓</div>
+      <div id="sideTheme" class="side-btn">🌗</div>
+      <div id="sideLetters" class="side-btn">✉️</div>
+      <div id="sideTip" class="side-btn">🍏</div>
+      <div id="sideShare" class="side-btn">🔗</div>
+    </div>
+
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div><strong>ZultX</strong><div class="small-muted">Your AI Assistant</div></div>
       <div class="small-muted">USER</div>
     </div>
 
     <h3 style="margin-top:6px">Your Chats</h3>
-    <div id="historyList" aria-live="polite"></div>
-    <div id="mobileActions" class="mobile-only" style="display:flex;gap:10px;margin-bottom:14px;">
-      <div id="sideTempBtn" class="top-tip">🌓</div>
-      <div id="sideLettersBtn" class="top-tip">✉️</div>
-      <div id="sideTipBtn" class="top-tip">🍏</div>
-      <div id="sideShareBtn" class="top-tip">🔗</div>
-    </div>
-    <div style="height:12px"></div>
     <div class="menu-btn" id="newChatBtn">+ New chat</div>
     <div style="height:14px"></div>
     <div class="hint">Local history (stored in your browser). Hold / right-click an item to delete.</div>
@@ -862,12 +888,10 @@ const historyList = document.getElementById("historyList");
 const newChatBtn = document.getElementById("newChatBtn");
 const suggestGrid = document.getElementById("suggestGrid");
 
-const lettersBtn = document.getElementById("lettersBtn");
 const lettersModal = document.getElementById("lettersModal");
 const modalLettersContent = document.getElementById("modalLettersContent");
 const closeLettersBtn = document.getElementById("closeLettersBtn");
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-const topTipBtn = document.getElementById("topTipBtn");
 const tipModal = document.getElementById("tipModal");
 const closeTipBtn = document.getElementById("closeTipBtn");
 const copyUpiBtn = document.getElementById("copyUpiBtn");
@@ -876,18 +900,17 @@ const tempChatBtn = document.getElementById("tempChatBtn");
 const tempModal = document.getElementById("tempModal");
 const tempList = document.getElementById("tempList");
 const closeTempBtn = document.getElementById("closeTempBtn");
-
-const themeToggle = document.getElementById("themeToggle");
 const themeIcon = document.getElementById("themeIcon");
 
 let currentConversationId = null;
 let tempMode = false; // if true, don't save to local history
 let longPressTimer = null;
-document.getElementById("sideLettersBtn").onclick = () => lettersBtn.click();
-document.getElementById("sideTipBtn").onclick = () => topTipBtn.click();
-document.getElementById("sideShareBtn").onclick = () => shareBtn.click();
-document.getElementById("sideTempBtn").onclick = () => tempChatBtn.click();
-  
+document.getElementById("sideTheme").onclick = toggleTheme;
+document.getElementById("sideLetters").onclick = ()=> openLettersModal();
+document.getElementById("sideTip").onclick = ()=> openTipModal();
+document.getElementById("sideShare").onclick = ()=> shareChat();
+document.getElementById("sideTemp").onclick = ()=> startTemporaryChat();
+
 /* -------------- HISTORY STORAGE -------------- */
 function updateTempIconVisibility(){
   const hasMessages = chatArea.querySelector(".msg");
