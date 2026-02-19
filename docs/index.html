@@ -1014,23 +1014,17 @@ mobileMenuBtn && mobileMenuBtn.addEventListener('click', ()=>{
 
 /* ---------- Temp button behavior (mobile-only) ---------- */
 function updateTempVisibility(){
-  // show temp button on mobile only until there's at least 1 message in chatArea
   if(!tempChatBtn) return;
+
   const hasMessages = !!chatArea.querySelector('.msg');
-  if(isMobile){
-    if(hasMessages){
-      tempChatBtn.style.display = 'none';
-      smallLogo && smallLogo.classList.remove('mobile-hidden'); smallLogo && smallLogo.classList.add('mobile-visible');
-    } else {
-      tempChatBtn.style.display = 'flex';
-      smallLogo && smallLogo.classList.remove('mobile-visible'); smallLogo && smallLogo.classList.add('mobile-hidden');
-    }
-  } else {
-    // desktop: hide the temp header button always (rule #1)
+
+  if(hasMessages){
     tempChatBtn.style.display = 'none';
-    smallLogo && smallLogo.classList.remove('mobile-hidden'); smallLogo && smallLogo.classList.add('mobile-visible');
+  } else {
+    tempChatBtn.style.display = 'flex';
   }
 }
+
 tempChatBtn && tempChatBtn.addEventListener('click', ()=>{
   // open modal or start temp chat
   populateTempList();
