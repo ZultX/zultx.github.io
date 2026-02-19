@@ -770,35 +770,39 @@ html.light .side .convo-item{
 <header>
   <div style="display:flex;gap:12px;align-items:center">
     <div id="mobileMenuBtn" class="top-tip mobile-only">☰</div>
-  <div style="display:flex;gap:12px;align-items:center">
-    <div class="logo">
-      <span class="fire">Zult</span><span class="x-black">X</span>
+    <div style="display:flex;gap:12px;align-items:center">
+      <div class="logo mobile-hidden" id="smallLogo">
+        <span class="fire">Zult</span><span class="x-black">X</span>
+      </div>
+      <div class="small-muted" style="font-weight:700">ZultX — v1.4</div>
     </div>
-    <div class="small-muted" style="font-weight:700">ZultX — v1.4</div>
-  </div>
 
-    <!-- temp chat 3/4 circle icon -->
-    <div id="tempChatBtn" class="temp-chat-icon" title="Temporary chats">
-      <!-- simple 3/4 circle SVG -->
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <!-- temp chat 3/4 circle icon — mobile-only -->
+    <div id="tempChatBtn" class="temp-chat-icon mobile-only" title="Temporary chats">
+      <!-- 3/4 circle SVG -->
+      <svg viewBox="0 0 24 24" fill="none" width="22" height="22" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path d="M12 2a10 10 0 1 0 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <circle cx="12" cy="12" r="9" fill="none" stroke="rgba(255,215,0,0.06)" stroke-width="2"/>
       </svg>
+      <div class="mini-theme" id="tempMiniTheme">🌗</div>
     </div>
 
     <div class="version-badge">v1.4</div>
   </div>
 </header>
 
+<!-- overlay for closing side/modals -->
+<div id="z-overlay" aria-hidden="true"></div>
+
 <div class="app">
-  <aside class="side">
+  <aside class="side" id="sidePanel">
     <div style="display:flex;align-items:center;justify-content:space-between;">
-    <div class="side-actions">
-      <div id="sideTemp" class="side-btn">🌓</div>
-      <div id="sideTheme" class="side-btn">🌗</div>
-      <div id="sideLetters" class="side-btn">✉️</div>
-      <div id="sideTip" class="side-btn">🍏</div>
-      <div id="sideShare" class="side-btn">🔗</div>
+      <div class="side-actions" id="sideActionsRow">
+        <div id="sideTheme" class="side-btn" aria-label="Toggle theme">🌗</div>
+        <div id="sideLetters" class="side-btn" aria-label="Letters">✉️</div>
+        <div id="sideTip" class="side-btn" aria-label="Tip">🍏</div>
+        <div id="sideShare" class="side-btn" aria-label="Share">🔗</div>
+      </div>
     </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -807,36 +811,36 @@ html.light .side .convo-item{
     </div>
 
     <h3 style="margin-top:6px">Your Chats</h3>
+    <div id="historyList" aria-live="polite"></div>
+    <div style="height:12px"></div>
     <div class="menu-btn" id="newChatBtn">+ New chat</div>
     <div style="height:14px"></div>
     <div class="hint">Local history (stored in your browser). Hold / right-click an item to delete.</div>
   </aside>
 
   <main class="main">
-    <!-- center suggestion / hero -->
     <div id="centerScreen" class="center-screen">
       <div class="center-inner">
         <div class="center-title">What can ZultX help with?</div>
-
         <div class="suggest-grid" id="suggestGrid">
           <div class="suggest-card" data-q="Make a list of beautiful flowers with their meanings">🌸 List of flowers & meanings</div>
           <div class="suggest-card" data-q="Explain black holes in simple words">🕳️ Black holes explained</div>
           <div class="suggest-card" data-q="Give me short study motivation for exams">⚡ Motivation for exams</div>
         </div>
-
         <button id="startBtn" class="start-btn">Ask Something New</button>
       </div>
     </div>
 
-    <!-- chat area (hidden initially) -->
     <div id="chatArea" class="chat-wrap" style="display:none" aria-live="polite"></div>
-    <!-- compose -->
+
     <div class="compose">
-        <div class="compose-inner">
-          <textarea id="input" placeholder="Ask ZultX something positive..." rows="1"></textarea>
-          <button id="sendBtn">Send</button>
-        </div>
+      <div class="compose-inner">
+        <textarea id="input" placeholder="Ask ZultX something positive..." rows="1"></textarea>
+        <button id="sendBtn">Send</button>
+      </div>
     </div>
+  </main>
+</div>
 
 <!-- Letters modal -->
 <div id="lettersModal" class="modal sm" aria-hidden="true">
@@ -847,7 +851,7 @@ html.light .side .convo-item{
   <pre id="modalLettersContent" style="white-space:pre-wrap;color:var(--text);margin-top:12px"></pre>
 </div>
 
-<!-- Tip & QR modal -->
+<!-- Tip modal -->
 <div id="tipModal" class="modal sm" aria-hidden="true">
   <h3>Tip ZultX</h3>
   <div style="display:flex;gap:8px;margin-top:12px">
@@ -870,608 +874,9 @@ html.light .side .convo-item{
   <div id="tempList" class="temp-list"></div>
 </div>
 
-<script>
-/* -------------- CONFIG / STATE -------------- */
-const API_BASE = "https://zultx.up.railway.app"; // adjust if needed
-// --- Keep Railway warm (ping every 4 minutes) ---
-setInterval(() => {
-  fetch(`${API_BASE}/health`)
-    .catch(() => {}); // ignore errors silently
-}, 240000); // 240000 ms = 4 minutes
-
-const chatArea = document.getElementById("chatArea");
-const input = document.getElementById("input");
-const sendBtn = document.getElementById("sendBtn");
-const startBtn = document.getElementById("startBtn");
-const centerScreen = document.getElementById("centerScreen");
-const historyList = document.getElementById("historyList");
-const newChatBtn = document.getElementById("newChatBtn");
-const suggestGrid = document.getElementById("suggestGrid");
-
-const lettersModal = document.getElementById("lettersModal");
-const modalLettersContent = document.getElementById("modalLettersContent");
-const closeLettersBtn = document.getElementById("closeLettersBtn");
-const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-const tipModal = document.getElementById("tipModal");
-const closeTipBtn = document.getElementById("closeTipBtn");
-const copyUpiBtn = document.getElementById("copyUpiBtn");
-
-const tempChatBtn = document.getElementById("tempChatBtn");
-const tempModal = document.getElementById("tempModal");
-const tempList = document.getElementById("tempList");
-const closeTempBtn = document.getElementById("closeTempBtn");
-const themeIcon = document.getElementById("themeIcon");
-
-let currentConversationId = null;
-let tempMode = false; // if true, don't save to local history
-let longPressTimer = null;
-document.getElementById("sideTheme").onclick = toggleTheme;
-document.getElementById("sideLetters").onclick = ()=> openLettersModal();
-document.getElementById("sideTip").onclick = ()=> openTipModal();
-document.getElementById("sideShare").onclick = ()=> shareChat();
-document.getElementById("sideTemp").onclick = ()=> startTemporaryChat();
-
-/* -------------- HISTORY STORAGE -------------- */
-function updateTempIconVisibility(){
-  const hasMessages = chatArea.querySelector(".msg");
-  const logo = document.querySelector(".logo");
-
-  if(hasMessages){
-    tempChatBtn.style.display = "none";
-    if(window.innerWidth <= 768){
-      logo.style.display = "flex";
-    }
-  }else{
-    if(window.innerWidth <= 768){
-      logo.style.display = "none";
-    }
-    tempChatBtn.style.display = "flex";
-  }
-  }
-
-function generateChatTitle(text){
-  const words = text.split(" ").slice(0,5).join(" ");
-  return words.length > 30 ? words.slice(0,30)+"..." : words;
-  }
-function makeConvoId(prefix='convo'){ return `${prefix}_${Date.now()}`; }
-
-function getAllHistory(){
-  const key = 'zultx_history';
-  try{
-    return JSON.parse(localStorage.getItem(key) || '{}');
-  }catch(e){
-    return {};
-  }
-}
-
-function setAllHistory(obj){
-  localStorage.setItem('zultx_history', JSON.stringify(obj));
-}
-
-function refreshHistoryList(){
-  const all = getAllHistory();
-  const keys = Object.keys(all).sort((a,b)=> all[b].created - all[a].created);
-  historyList.innerHTML = '';
-  for(const k of keys){
-    const item = all[k];
-    const el = document.createElement('div');
-    el.className = 'history-item';
-    const last = (item.messages && item.messages[item.messages.length-1]) || null;
-    el.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px"><div style="font-weight:700">${item.id}</div><div class="meta">${last? last.text.slice(0,48) : 'New chat'}</div></div><div class="small-muted">${new Date(item.created).toLocaleString()}</div>`;
-    // click opens
-    el.onclick = ()=> openConversation(k);
-    // right-click / hold to delete
-    el.oncontextmenu = (e)=> {
-      e.preventDefault();
-      confirmAndDelete(k);
-    };
-    // touch long-press support: show delete on long hold
-    let pressTimer = null;
-    el.addEventListener('touchstart', (e)=>{
-      pressTimer = setTimeout(()=> confirmAndDelete(k), 650);
-    }, {passive:true});
-    el.addEventListener('touchend', ()=> { clearTimeout(pressTimer); }, {passive:true});
-    historyList.appendChild(el);
-  }
-}
-
-/* save message but skip if in tempMode */
-function saveMessageToHistory(convoId, role, text){
-  if(tempMode) return;
-  const all = getAllHistory();
-  all[convoId] = all[convoId] || { id: convoId, created: Date.now(), messages: [] };
-  all[convoId].messages.push({ role, text, t: Date.now() });
-  setAllHistory(all);
-  refreshHistoryList();
-}
-
-function fakeStream(element, fullText, speed = 15) {
-  element.innerHTML = "";
-  let i = 0;
-
-  function type() {
-    if (i < fullText.length) {
-      element.textContent += fullText[i];
-      i++;
-      chatArea.scrollTop = chatArea.scrollHeight;
-      setTimeout(type, speed);
-    } else {
-      element.innerHTML = marked.parse(fullText);
-
-      // highlight + copy buttons AFTER render
-      element.querySelectorAll("pre code").forEach(block => {
-        hljs.highlightElement(block);
-      });
-
-      enhanceCodeBlocks(element);
-    }
-  }
-
-  type();
-}
-
-/* load conversation */
-function loadConversation(convoId){
-  const all = getAllHistory();
-  return all[convoId] || null;
-}
-
-function localSaveInit(convoId){
-  const all = getAllHistory();
-  if(!all[convoId]) all[convoId] = { id: convoId, created: Date.now(), messages: [] };
-  setAllHistory(all);
-}
-
-/* delete chat local + optional server call */
-function confirmAndDelete(convoId){
-  if(!confirm("Delete this chat forever? This removes local history (and attempts server delete if available).")) return;
-  const all = getAllHistory();
-  if(all[convoId]) delete all[convoId];
-  setAllHistory(all);
-  refreshHistoryList();
-  // if server supports history deletion, attempt call (best-effort)
-  (async()=>{
-    try{
-      await fetch(`${API_BASE}/history/delete?id=${encodeURIComponent(convoId)}`, { method: 'DELETE' , mode:'cors' });
-    }catch(e){
-      // ignore
-    }
-    // if currently viewing it, reset UI
-    if(currentConversationId === convoId){
-      currentConversationId = null;
-      chatArea.innerHTML = '';
-      centerScreen.style.display = 'flex';
-      chatArea.style.display = 'none';
-    }
-  })();
-}
-
-/* -------------- UI helpers -------------- */
-function addBubble(kind, text, stream = true){
-  const d = document.createElement('div');
-  d.className = 'msg ' + (kind === 'user' ? 'user' : 'ai');
-
-  if(kind === 'ai'){
-    if(stream){
-      fakeStream(d, text, 5);
-    } else {
-      d.innerHTML = marked.parse(text);
-      d.querySelectorAll("pre code").forEach(b => hljs.highlightElement(b));
-      enhanceCodeBlocks(d);
-    }
-  } else {
-    d.textContent = text;
-  }
-
-  chatArea.appendChild(d);
-  chatArea.scrollTop = chatArea.scrollHeight;
-}
-function addUserMsg(text){
-  addBubble('user', text);
-  saveMessageToHistory(currentConversationId, 'user', text);
-  updateTempIconVisibility();
-}
-
-function addAiMsg(text){
-  addBubble('ai', text);
-  saveMessageToHistory(currentConversationId, 'ai', text);
-  updateTempIconVisibility();
-  }
-
-
-function addSystemMsg(text){
-  const d = document.createElement('div'); d.style.textAlign='center'; d.style.color='var(--muted)'; d.textContent = text; chatArea.appendChild(d); chatArea.scrollTop = chatArea.scrollHeight;
-}
-function enhanceCodeBlocks(container){
-  container.querySelectorAll('pre code').forEach(block => {
-  const pre = block.parentElement;
-  if(pre.classList.contains('code-enhanced')) return;
-  pre.classList.add('code-enhanced');
-
-  // detect language from markdown ```lang
-  const className = block.className || '';
-  const match = className.match(/language-(\w+)/);
-  pre.setAttribute('data-lang', match ? match[1].toUpperCase() : 'CODE');
-
-  const btn = document.createElement('button');
-  btn.textContent = 'Copy';
-  btn.className = 'copy-btn';
-
-  btn.onclick = () => {
-    navigator.clipboard.writeText(block.innerText);
-    btn.textContent = 'Copied';
-    setTimeout(() => btn.textContent = 'Copy', 1500);
-  };
-
-  pre.style.position = 'relative';
-  pre.appendChild(btn);
-});
-}
-
-/* -------------- SEND MESSAGE (no stream) -------------- */
-async function sendMessage(){
-  const text = input.value.trim();
-  if(!text) return;
-  
-  centerScreen.style.display = 'none';
-  chatArea.style.display = 'flex';
-  console.log("Send clicked");
-  const start = performance.now();
-
-  if(!currentConversationId){
-  const title = generateChatTitle(text);
-  currentConversationId = "chat_" + Date.now();
-  localSaveInit(currentConversationId);
-  const all = getAllHistory();
-  all[currentConversationId].id = title;
-  setAllHistory(all);
-  }
-
-  addUserMsg(text);
-  input.value = '';
-  sendBtn.disabled = true;
-
-  let aiDiv = document.createElement('div');
-  aiDiv.className = 'msg ai thinking';
-  aiDiv.innerHTML = `<div class="ai-pulse"></div>`;
-  chatArea.appendChild(aiDiv);
-  try {
-    const token = getToken();
-    const sessionId = ensureSessionId();
-
-    const headers = {
-      "Accept": "application/json",
-      "X-Session-Id": sessionId
-    };
-
-    if (token) {
-      headers["Authorization"] = "Bearer " + token;
-    }
-
-    const res = await fetch(
-      `${API_BASE}/ask?q=${encodeURIComponent(text)}`,
-      {
-        method: "GET",
-        headers: headers
-      }
-    );
-
-    if(!res.ok){
-      throw new Error("Server error");
-    }
-
-    const data = await res.json();
-    const answer = data?.answer || "No response.";
-
-    aiDiv.classList.remove("thinking");
-    fakeStream(aiDiv, answer, 0);
-    console.log("Backend time:",
-      ((performance.now() - start)/1000).toFixed(2) + "s"
-    );
-
-    saveMessageToHistory(currentConversationId, 'ai', answer);
-
-  } catch(err){
-    console.error(err);
-    aiDiv.textContent = "⚠️ Connection error.";
-  } finally {
-    sendBtn.disabled = false;
-  }
-}
-
-
-
-/* -------------- OPEN / NEW CONVERSATION -------------- */
-startBtn.addEventListener('click', ()=> {
-  tempMode = false;
-  currentConversationId = makeConvoId();
-  localSaveInit(currentConversationId);
-  chatArea.innerHTML = '';
-  centerScreen.style.display = 'none';
-  chatArea.style.display = 'flex';
-  addSystemMsg('New chat started.');
-  updateTempIconVisibility();
-  refreshHistoryList();
-});
-
-newChatBtn.addEventListener('click', ()=> {
-  tempMode = false;
-  currentConversationId = makeConvoId();
-  localSaveInit(currentConversationId);
-  chatArea.innerHTML = '';
-  centerScreen.style.display = 'none';
-  chatArea.style.display = 'flex';
-  addSystemMsg('New chat started.');
-  updateTempIconVisibility();
-  refreshHistoryList();
-});
-
-function openConversation(convoId){
-  tempMode = false;
-  currentConversationId = convoId;
-  const convo = loadConversation(convoId);
-  chatArea.innerHTML = '';
-  centerScreen.style.display = 'none';
-  chatArea.style.display = 'flex';
-  if(convo && convo.messages){
-    for(const m of convo.messages){
-      addBubble(m.role === 'user' ? 'user' : 'ai', m.text, false);
-    }
-  }
-}
-
-/* -------------- SUGGESTION CARDS -------------- */
-document.querySelectorAll('.suggest-card').forEach(card=>{
-  card.onclick = ()=>{
-    const q = card.dataset.q;
-    input.value = q;
-    centerScreen.style.display='none';
-    chatArea.style.display='flex';
-    // create a temp conversation for instant suggestion (we want user to be able to save it)
-    currentConversationId = makeConvoId();
-    localSaveInit(currentConversationId);
-    sendMessage();
-  };
-});
-
-/* -------------- TEMP CHAT MODE + TEMP LIST -------------- */
-tempChatBtn.onclick = ()=>{
-  // open temp modal with list
-  populateTempList();
-  tempModal.style.display = 'block';
-  document.body.style.overflow = 'hidden';
-};
-
-closeTempBtn && (closeTempBtn.onclick = ()=>{
-  tempModal.style.display = 'none';
-  document.body.style.overflow = '';
-});
-
-function createTempConversation(){
-  tempMode = true;
-  currentConversationId = makeConvoId('temp');
-  // don't call localSaveInit for temp (we keep transient objects but we may store a lightweight snapshot in memory if desired)
-  chatArea.innerHTML = '';
-  centerScreen.style.display = 'none';
-  chatArea.style.display = 'flex';
-  addSystemMsg('Temporary chat started (will not be saved).');
-  refreshHistoryList();
-}
-
-/* build list of temp conversations stored in localStorage as those starting with 'temp_' */
-function populateTempList(){
-  tempList.innerHTML = '';
-  const all = getAllHistory();
-  const tempKeys = Object.keys(all).filter(k => k.startsWith('temp_')).sort((a,b)=> all[b].created - all[a].created);
-  // show a button to start a new temporary chat
-  const newBtn = document.createElement('div');
-  newBtn.className = 'menu-btn';
-  newBtn.textContent = '+ New temporary chat';
-  newBtn.onclick = ()=> { createTempConversation(); tempModal.style.display='none'; document.body.style.overflow=''; };
-  tempList.appendChild(newBtn);
-
-  if(tempKeys.length === 0){
-    const p = document.createElement('div'); p.className='small-muted'; p.textContent='No temporary chats found (they are not saved by default).';
-    tempList.appendChild(p);
-    return;
-  }
-
-  for(const k of tempKeys){
-    const entry = all[k];
-    const el = document.createElement('div');
-    el.className = 'temp-entry';
-    el.innerHTML = `<div style="display:flex;flex-direction:column"><strong>${entry.id}</strong><div class="small-muted">${entry.messages && entry.messages.length ? entry.messages[entry.messages.length-1].text.slice(0,60) : 'Empty'}</div></div><div style="display:flex;gap:8px"><button data-id="${k}" class="open-temp">Open</button><button data-id="${k}" class="del-temp">Delete</button></div>`;
-    tempList.appendChild(el);
-  }
-
-  // bind open + delete
-  tempList.querySelectorAll('.open-temp').forEach(btn=>{
-    btn.onclick = (e)=> {
-      const id = btn.dataset.id;
-      tempMode = true;
-      currentConversationId = id;
-      const convo = loadConversation(id);
-      chatArea.innerHTML = '';
-      centerScreen.style.display = 'none';
-      chatArea.style.display = 'flex';
-      if(convo && convo.messages) convo.messages.forEach(m=> addBubble(m.role === 'user' ? 'user' : 'ai', m.text));
-      tempModal.style.display = 'none';
-      document.body.style.overflow = '';
-    };
-  });
-  tempList.querySelectorAll('.del-temp').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const id = btn.dataset.id;
-      if(!confirm("Delete this temporary chat?")) return;
-      const all = getAllHistory();
-      delete all[id];
-      setAllHistory(all);
-      populateTempList();
-      refreshHistoryList();
-      // try server delete
-      try{ await fetch(`${API_BASE}/history/delete?id=${encodeURIComponent(id)}`, { method:'DELETE' }); }catch(e){}
-    };
-  });
-}
-
-/* -------------- Letters / Tips — same as before -------------- */
-lettersBtn.addEventListener('click', async ()=>{
-  try{
-    const res = await fetch(`${API_BASE}/letters`);
-    if(!res.ok) return alert('No letters');
-    const data = await res.json();
-    const name = (data.letters && data.letters.length) ? data.letters[0] : null;
-    if(!name) { modalLettersContent.textContent = 'No letters found'; lettersModal.style.display='block'; return; }
-    const r2 = await fetch(`${API_BASE}/letters/` + encodeURIComponent(name));
-    const text = await r2.text();
-    modalLettersContent.textContent = text;
-    lettersModal.style.display = 'block';
-    document.body.style.overflow = 'hidden';
-  }catch(e){ alert('Unable to load letters'); console.error(e); }
-});
-closeLettersBtn.addEventListener('click', ()=> { lettersModal.style.display='none'; document.body.style.overflow=''; });
-
-topTipBtn.addEventListener('click', ()=> { tipModal.style.display='block'; document.body.style.overflow='hidden'; });
-closeTipBtn.addEventListener('click', ()=> { tipModal.style.display='none'; document.body.style.overflow=''; });
-
-copyUpiBtn && (copyUpiBtn.onclick = async ()=> {
-  try{
-    await navigator.clipboard.writeText('9358588509@fam');
-    alert('UPI copied: 9358588509@fam');
-  }catch(e){
-    alert('Copy failed. UPI: 9358588509@fam');
-  }
-});
-
-/* createTip uses your existing backend /tip endpoint; this is safe best-effort */
-async function createTip(amount){
-  try{
-    const res = await fetch(`${API_BASE}/tip`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ amount })
-    });
-    const data = await res.json();
-    if(!data || !data.upi_link) throw new Error("No UPI");
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if(isMobile){
-      window.location.href = data.upi_link;
-    } else {
-      // desktop -> show QR in new window
-      window.open(data.qr, '_blank');
-      alert('Use UPI link or scan QR from the new tab.');
-    }
-  }catch(e){
-    alert("Payment couldn't auto-open. Open your UPI app → Pay via UPI ID → Paste: 9358588509@fam");
-  }
-}
-
-/* -------------- THEME TOGGLE -------------- */
-function applyInitialTheme(){
-  // prefer user's manual or system. body class controls theme (html element)
-  const saved = localStorage.getItem('zultx_theme');
-  if(saved === 'light') document.documentElement.className = 'light';
-  else if(saved === 'dark') document.documentElement.className = 'dark';
-  else {
-    // no saved -> respect system (media handled by CSS) but set class to match computed bg
-    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-    document.documentElement.className = prefersLight ? 'light' : 'dark';
-  }
-  updateThemeIcon();
-}
-function toggleTheme(){
-  const cur = document.documentElement.className === 'light' ? 'light' : 'dark';
-  const next = cur === 'light' ? 'dark' : 'light';
-  document.documentElement.className = next;
-  localStorage.setItem('zultx_theme', next);
-  updateThemeIcon();
-}
-function updateThemeIcon(){
-  const isLight = document.documentElement.className === 'light';
-  themeIcon.textContent = isLight ? '🌞' : '🌙';
-}
-themeToggle.onclick = toggleTheme;
-applyInitialTheme();
-
-const shareBtn = document.getElementById('shareBtn');
-
-shareBtn.onclick = async ()=>{
-  const shareData = {
-    title: 'ZultX AI',
-    text: 'ZultX — Fast, Adaptive Reasoning Ai.Try it now.',
-    url: 'https://zultx.github.io/ZultX-v2/'
-  };
-
-  // Mobile / supported browsers
-  if(navigator.share){
-    try{
-      await navigator.share(shareData);
-    }catch(e){
-      // user cancelled, ignore
-    }
-  } else {
-    // Desktop fallback → copy link
-    try{
-      await navigator.clipboard.writeText(shareData.url);
-      alert('Link copied! Share ZultX anywhere 🚀');
-    }catch(e){
-      prompt('Copy & share this link:', shareData.url);
-    }
-  }
-};
-  
-/* -------------- BINDINGS -------------- */
-sendBtn.addEventListener('click', sendMessage);
-
-input.addEventListener("keydown", function(e) {
-
-  if (e.key === "Enter") {
-
-    // SHIFT + ENTER = always newline
-    if (e.shiftKey) {
-      return;
-    }
-
-    // MOBILE = always newline
-    if (isMobile) {
-      return;
-    }
-
-    // DESKTOP normal enter = send
-    e.preventDefault();
-    sendMessage();
-  }
-
-});
-input.addEventListener('input', ()=>{
-  input.style.height = "auto";
-  input.style.height = input.scrollHeight + "px";
-});
-
-const mobileMenuBtn = document.getElementById("mobileMenuBtn");
-const sidePanel = document.querySelector(".side");
-
-mobileMenuBtn.addEventListener("click", ()=>{
-  sidePanel.classList.toggle("open");
-});
-
-/* init: ensure conversation exists */
-if(!currentConversationId){
-  currentConversationId = makeConvoId();
-  localSaveInit(currentConversationId);
-}
-refreshHistoryList();
-
-/* show centerScreen for first load */
-centerScreen.style.display = 'flex';
-chatArea.style.display = 'none';
-updateTempIconVisibility();
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-
-<!-- PREMIUM FULLSCREEN AUTH MODAL -->
+<!-- PREMIUM UI -->
 <div id="premiumAuth" class="premium-modal" aria-hidden="true">
-  <div class="premium-card" role="dialog" aria-modal="true">
+  <div class="premium-card" role="dialog" aria-modal="true" id="premiumCard">
     <div class="premium-header">
       <div>
         <div class="premium-title">ZultX — Account Access</div>
@@ -1489,7 +894,6 @@ updateTempIconVisibility();
         <input id="p_password" type="password" placeholder="Password" style="flex:1;" />
         <button id="p_eye" class="pw-eye" title="Show/Hide password">👁️</button>
       </div>
-
       <div style="display:flex;gap:10px;align-items:center">
         <button id="p_submit" class="menu-btn">Login</button>
         <button id="p_toggle" class="menu-btn">Switch to Signup</button>
@@ -1497,87 +901,502 @@ updateTempIconVisibility();
         <div id="p_msg" class="small-muted" style="margin-left:8px"></div>
       </div>
     </div>
-
-    <div style="margin-top:12px;color:var(--muted);font-size:13px">
-      <strong>Note:</strong> Username must be unique. Password is hidden by default — use the eye button to preview.
-    </div>
   </div>
 </div>
 
-<script>
-// ============================
-// AUTH CORE HELPERS (REQUIRED)
-// ============================
+<!-- libs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+marked.setOptions({ gfm:true, breaks:true, smartLists:true, smartypants:true });
 
-function ensureSessionId(){
-  let sid = localStorage.getItem('zultx_session');
-  if(!sid){
-    sid = 'sess_' + Math.random().toString(36).slice(2) + '_' + Date.now();
-    localStorage.setItem('zultx_session', sid);
+/* ---------- Config & DOM refs ---------- */
+const API_BASE = "https://zultx.up.railway.app";
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+const overlay = document.getElementById('z-overlay');
+const chatArea = document.getElementById("chatArea");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+const startBtn = document.getElementById("startBtn");
+const centerScreen = document.getElementById("centerScreen");
+const historyList = document.getElementById("historyList");
+const newChatBtn = document.getElementById("newChatBtn");
+const suggestGrid = document.getElementById("suggestGrid");
+
+const sidePanel = document.getElementById("sidePanel");
+const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+const tempChatBtn = document.getElementById("tempChatBtn");
+const tempModal = document.getElementById("tempModal");
+const tempList = document.getElementById("tempList");
+const closeTempBtn = document.getElementById("closeTempBtn");
+const smallLogo = document.getElementById("smallLogo");
+
+const sideTheme = document.getElementById("sideTheme");
+const sideLetters = document.getElementById("sideLetters");
+const sideTip = document.getElementById("sideTip");
+const sideShare = document.getElementById("sideShare");
+
+const lettersModal = document.getElementById("lettersModal");
+const modalLettersContent = document.getElementById("modalLettersContent");
+const closeLettersBtn = document.getElementById("closeLettersBtn");
+
+const tipModal = document.getElementById("tipModal");
+const closeTipBtn = document.getElementById("closeTipBtn");
+const copyUpiBtn = document.getElementById("copyUpiBtn");
+
+const premiumAuth = document.getElementById("premiumAuth");
+const premiumClose = document.getElementById("premiumClose");
+const p_username = document.getElementById("p_username");
+const p_email = document.getElementById("p_email");
+const p_password = document.getElementById("p_password");
+const p_submit = document.getElementById("p_submit");
+const p_toggle = document.getElementById("p_toggle");
+const p_guest = document.getElementById("p_guest");
+const p_eye = document.getElementById("p_eye");
+const p_msg = document.getElementById("p_msg");
+
+let currentConversationId = null;
+let tempMode = false;
+
+/* ---------- Safe helpers ---------- */
+function $id(id){ return document.getElementById(id); }
+function showOverlay(){ overlay.style.display = 'block'; overlay.setAttribute('aria-hidden','false'); }
+function hideOverlay(){ overlay.style.display = 'none'; overlay.setAttribute('aria-hidden','true'); }
+
+/* Close everything on overlay click (mobile UX) */
+overlay.addEventListener('click', ()=> {
+  closeAllSideModals();
+});
+
+/* ---------- Theme logic (single source of truth) ---------- */
+function applyInitialTheme(){
+  const saved = localStorage.getItem('zultx_theme');
+  if(saved === 'light') document.documentElement.className = 'light';
+  else if(saved === 'dark') document.documentElement.className = 'dark';
+  else {
+    const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+    document.documentElement.className = prefersLight ? 'light' : 'dark';
   }
-  return sid;
+  updateThemeVisuals();
 }
+function toggleTheme(){
+  const cur = document.documentElement.className === 'light' ? 'light' : 'dark';
+  const next = cur === 'light' ? 'dark' : 'light';
+  document.documentElement.className = next;
+  localStorage.setItem('zultx_theme', next);
+  updateThemeVisuals();
+}
+function updateThemeVisuals(){
+  const isLight = document.documentElement.className === 'light';
+  // sideTheme button icon
+  if(sideTheme) sideTheme.textContent = isLight ? '🌞' : '🌙';
+  // temp mini theme inside the small circle on mobile
+  const mini = document.getElementById('tempMiniTheme');
+  if(mini) mini.textContent = isLight ? '🌞' : '🌙';
+  // code block highlighting re-check if present
+}
+sideTheme && sideTheme.addEventListener('click', toggleTheme);
+applyInitialTheme();
 
-function setToken(token){
-  if(token){
-    localStorage.setItem('zultx_token', token);
+/* ---------- Mobile menu toggle ---------- */
+mobileMenuBtn && mobileMenuBtn.addEventListener('click', ()=>{
+  sidePanel.classList.toggle('open');
+  if(sidePanel.classList.contains('open')) showOverlay(); else hideOverlay();
+});
+
+/* ---------- Temp button behavior (mobile-only) ---------- */
+function updateTempVisibility(){
+  // show temp button on mobile only until there's at least 1 message in chatArea
+  if(!tempChatBtn) return;
+  const hasMessages = !!chatArea.querySelector('.msg');
+  if(isMobile){
+    if(hasMessages){
+      tempChatBtn.style.display = 'none';
+      smallLogo && smallLogo.classList.remove('mobile-hidden'); smallLogo && smallLogo.classList.add('mobile-visible');
+    } else {
+      tempChatBtn.style.display = 'flex';
+      smallLogo && smallLogo.classList.remove('mobile-visible'); smallLogo && smallLogo.classList.add('mobile-hidden');
+    }
   } else {
-    localStorage.removeItem('zultx_token');
+    // desktop: hide the temp header button always (rule #1)
+    tempChatBtn.style.display = 'none';
+    smallLogo && smallLogo.classList.remove('mobile-hidden'); smallLogo && smallLogo.classList.add('mobile-visible');
+  }
+}
+tempChatBtn && tempChatBtn.addEventListener('click', ()=>{
+  // open modal or start temp chat
+  populateTempList();
+  tempModal.style.display = 'block';
+  showOverlay();
+});
+
+/* start a fresh temporary chat (not saved) */
+function createTempConversation(){
+  tempMode = true;
+  currentConversationId = makeConvoId('temp');
+  chatArea.innerHTML = '';
+  centerScreen.style.display = 'none';
+  chatArea.style.display = 'flex';
+  addSystemMsg('Temporary chat started (will not be saved).');
+  updateTempVisibility();
+}
+
+/* helper used by side button mapping */
+function startTemporaryChat(){
+  // mobile- and desktop-consistent entrypoint for temporary chats
+  // on desktop we push a temp conversation but also show a toast hint
+  createTempConversation();
+  tempModal.style.display = 'none';
+  hideOverlay();
+}
+
+/* populate temp list — temp-conversations are saved under 'temp_' to local history if you choose to persist them */
+function populateTempList(){
+  tempList.innerHTML = '';
+  const all = getAllHistory();
+  const tempKeys = Object.keys(all).filter(k => k.startsWith('temp_')).sort((a,b)=> all[b].created - all[a].created);
+
+  const newBtn = document.createElement('div');
+  newBtn.className = 'menu-btn';
+  newBtn.textContent = '+ New temporary chat';
+  newBtn.onclick = ()=> { createTempConversation(); tempModal.style.display='none'; hideOverlay(); };
+  tempList.appendChild(newBtn);
+
+  if(tempKeys.length === 0){
+    const p = document.createElement('div'); p.className='small-muted'; p.textContent='No temporary chats found (they are not saved by default).';
+    tempList.appendChild(p);
+    return;
+  }
+
+  for(const k of tempKeys){
+    const entry = all[k];
+    const el = document.createElement('div');
+    el.className = 'temp-entry';
+    el.innerHTML = `<div style="display:flex;flex-direction:column"><strong>${entry.id}</strong><div class="small-muted">${entry.messages && entry.messages.length ? entry.messages[entry.messages.length-1].text.slice(0,60) : 'Empty'}</div></div><div style="display:flex;gap:8px"><button data-id="${k}" class="open-temp">Open</button><button data-id="${k}" class="del-temp">Delete</button></div>`;
+    tempList.appendChild(el);
+  }
+
+  tempList.querySelectorAll('.open-temp').forEach(btn=>{
+    btn.onclick = ()=> {
+      const id = btn.dataset.id;
+      tempMode = true;
+      currentConversationId = id;
+      const convo = loadConversation(id);
+      chatArea.innerHTML = '';
+      centerScreen.style.display = 'none';
+      chatArea.style.display = 'flex';
+      if(convo && convo.messages) convo.messages.forEach(m=> addBubble(m.role === 'user' ? 'user' : 'ai', m.text, false));
+      tempModal.style.display = 'none';
+      hideOverlay();
+      updateTempVisibility();
+    };
+  });
+  tempList.querySelectorAll('.del-temp').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.id;
+      if(!confirm("Delete this temporary chat?")) return;
+      const al = getAllHistory();
+      delete al[id];
+      setAllHistory(al);
+      populateTempList();
+      refreshHistoryList();
+    };
+  });
+}
+
+/* close temp modal */
+closeTempBtn && closeTempBtn.addEventListener('click', ()=> { tempModal.style.display = 'none'; hideOverlay(); });
+
+/* ---------- Letters / Tips / Share functions (wired to side buttons) ---------- */
+function openLettersModal(){
+  lettersModal.style.display = 'block';
+  showOverlay();
+  loadLetters();
+}
+async function loadLetters(){
+  try{
+    const res = await fetch(`${API_BASE}/letters`);
+    if(!res.ok) { modalLettersContent.textContent = 'No letters'; return; }
+    const data = await res.json();
+    const name = (data.letters && data.letters.length) ? data.letters[0] : null;
+    if(!name) { modalLettersContent.textContent = 'No letters found'; return; }
+    const r2 = await fetch(`${API_BASE}/letters/` + encodeURIComponent(name));
+    const text = await r2.text();
+    modalLettersContent.textContent = text;
+  }catch(e){ modalLettersContent.textContent = 'Unable to load letters'; console.error(e); }
+}
+closeLettersBtn && closeLettersBtn.addEventListener('click', ()=> { lettersModal.style.display='none'; hideOverlay(); });
+
+function openTipModal(){
+  tipModal.style.display = 'block';
+  showOverlay();
+}
+closeTipBtn && closeTipBtn.addEventListener('click', ()=> { tipModal.style.display='none'; hideOverlay(); });
+
+copyUpiBtn && (copyUpiBtn.onclick = async ()=> {
+  try{
+    await navigator.clipboard.writeText('9358588509@fam');
+    alert('UPI copied: 9358588509@fam');
+  }catch(e){
+    alert('Copy failed. UPI: 9358588509@fam');
+  }
+});
+
+function shareChat(){
+  const shareData = { title: 'ZultX AI', text: 'ZultX — Fast, Adaptive Reasoning AI. Try it now.', url: 'https://zultx.github.io/ZultX-v2/' };
+  if(navigator.share){
+    navigator.share(shareData).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(shareData.url).then(()=> alert('Link copied!')).catch(()=> prompt('Copy & share this link:', shareData.url));
   }
 }
 
-function getToken(){
-  return localStorage.getItem('zultx_token');
+/* wire side buttons safely */
+sideLetters && sideLetters.addEventListener('click', openLettersModal);
+sideTip && sideTip.addEventListener('click', openTipModal);
+sideShare && sideShare.addEventListener('click', shareChat);
+
+/* ---------- History storage helpers ---------- */
+function makeConvoId(prefix='convo'){ return `${prefix}_${Date.now()}`; }
+function getAllHistory(){
+  try{ return JSON.parse(localStorage.getItem('zultx_history') || '{}'); } catch(e){ return {}; }
+}
+function setAllHistory(obj){ localStorage.setItem('zultx_history', JSON.stringify(obj)); }
+
+function refreshHistoryList(){
+  const all = getAllHistory();
+  const keys = Object.keys(all).sort((a,b)=> all[b].created - all[a].created);
+  historyList.innerHTML = '';
+  for(const k of keys){
+    const item = all[k];
+    const el = document.createElement('div');
+    el.className = 'history-item';
+    const last = (item.messages && item.messages[item.messages.length-1]) || null;
+    el.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px"><div style="font-weight:700">${item.id}</div><div class="meta">${last? last.text.slice(0,48) : 'New chat'}</div></div><div class="small-muted">${new Date(item.created).toLocaleString()}</div>`;
+    el.onclick = ()=> openConversation(k);
+    el.oncontextmenu = (e)=> { e.preventDefault(); confirmAndDelete(k); };
+    el.addEventListener('touchstart', ()=>{
+      this.pressTimer = setTimeout(()=> confirmAndDelete(k), 650);
+    }, {passive:true});
+    el.addEventListener('touchend', ()=> { clearTimeout(this.pressTimer); }, {passive:true});
+    historyList.appendChild(el);
+  }
 }
 
-function loggedIn(){
-  return !!getToken();
+/* ---------- messaging UI helpers ---------- */
+function addBubble(kind, text, stream = true){
+  const d = document.createElement('div');
+  d.className = 'msg ' + (kind === 'user' ? 'user' : 'ai');
+  if(kind === 'ai'){
+    if(stream) fakeStream(d, text, 5);
+    else { d.innerHTML = marked.parse(text); d.querySelectorAll("pre code").forEach(b => hljs.highlightElement(b)); enhanceCodeBlocks(d); }
+  } else {
+    d.textContent = text;
+  }
+  chatArea.appendChild(d);
+  chatArea.scrollTop = chatArea.scrollHeight;
 }
-</script>
+function addUserMsg(text){
+  addBubble('user', text);
+  saveMessageToHistory(currentConversationId, 'user', text);
+  updateTempVisibility();
+}
+function addAiMsg(text){
+  addBubble('ai', text);
+  saveMessageToHistory(currentConversationId, 'ai', text);
+  updateTempVisibility();
+}
+function addSystemMsg(text){
+  const d = document.createElement('div');
+  d.style.textAlign='center'; d.style.color='var(--muted)'; d.textContent = text;
+  chatArea.appendChild(d); chatArea.scrollTop = chatArea.scrollHeight;
+}
 
-<script>
-/* PREMIUM AUTH JS (replace previous auth handlers) */
-const PREMIUM_AUTH = document.getElementById('premiumAuth');
-const P_CLOSE = document.getElementById('premiumClose');
-const P_USERNAME = document.getElementById('p_username');
-const P_EMAIL = document.getElementById('p_email');
-const P_PASSWORD = document.getElementById('p_password');
-const P_SUBMIT = document.getElementById('p_submit');
-const P_TOGGLE = document.getElementById('p_toggle');
-const P_GUEST = document.getElementById('p_guest');
-const P_EYE = document.getElementById('p_eye');
-const P_MSG = document.getElementById('p_msg');
+function fakeStream(element, fullText, speed = 10) {
+  element.innerHTML = "";
+  let i = 0;
+  function type() {
+    if (i < fullText.length) {
+      element.textContent += fullText[i++];
+      chatArea.scrollTop = chatArea.scrollHeight;
+      setTimeout(type, speed);
+    } else {
+      element.innerHTML = marked.parse(fullText);
+      element.querySelectorAll("pre code").forEach(block => hljs.highlightElement(block));
+      enhanceCodeBlocks(element);
+    }
+  }
+  type();
+}
 
-let premiumMode = 'login'; // login | signup
+function enhanceCodeBlocks(container){
+  container.querySelectorAll('pre code').forEach(block => {
+    const pre = block.parentElement;
+    if(pre.classList.contains('code-enhanced')) return;
+    pre.classList.add('code-enhanced');
+    const className = block.className || '';
+    const match = className.match(/language-(\w+)/);
+    pre.setAttribute('data-lang', match ? match[1].toUpperCase() : 'CODE');
+    const btn = document.createElement('button');
+    btn.textContent = 'Copy';
+    btn.className = 'copy-btn';
+    btn.onclick = () => { navigator.clipboard.writeText(block.innerText); btn.textContent = 'Copied'; setTimeout(()=>btn.textContent='Copy',1500); };
+    pre.style.position = 'relative';
+    pre.appendChild(btn);
+  });
+}
 
+/* ---------- history save/load ---------- */
+function saveMessageToHistory(convoId, role, text){
+  if(tempMode) return;
+  const all = getAllHistory();
+  all[convoId] = all[convoId] || { id: convoId, created: Date.now(), messages: [] };
+  all[convoId].messages.push({ role, text, t: Date.now() });
+  setAllHistory(all);
+  refreshHistoryList();
+}
+function loadConversation(convoId){
+  const all = getAllHistory();
+  return all[convoId] || null;
+}
+function localSaveInit(convoId){
+  const all = getAllHistory();
+  if(!all[convoId]) all[convoId] = { id: convoId, created: Date.now(), messages: [] };
+  setAllHistory(all);
+}
+
+/* ---------- Send message flow ---------- */
+async function sendMessage(){
+  const text = input.value.trim();
+  if(!text) return;
+  centerScreen.style.display = 'none'; chatArea.style.display = 'flex';
+  if(!currentConversationId){
+    currentConversationId = makeConvoId();
+    localSaveInit(currentConversationId);
+  }
+  addUserMsg(text);
+  input.value = '';
+  sendBtn.disabled = true;
+
+  let aiDiv = document.createElement('div'); aiDiv.className = 'msg ai thinking'; aiDiv.innerHTML = `<div class="ai-pulse"></div>`;
+  chatArea.appendChild(aiDiv);
+  try{
+    const token = getToken();
+    const sessionId = ensureSessionId();
+    const headers = { "Accept":"application/json", "X-Session-Id": sessionId };
+    if(token) headers["Authorization"] = "Bearer " + token;
+    const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, { method:"GET", headers });
+    if(!res.ok) throw new Error('Server error');
+    const data = await res.json();
+    const answer = data?.answer || "No response.";
+    aiDiv.classList.remove("thinking");
+    fakeStream(aiDiv, answer, 0);
+    saveMessageToHistory(currentConversationId, 'ai', answer);
+  }catch(err){
+    console.error(err);
+    aiDiv.textContent = "⚠️ Connection error.";
+  }finally{ sendBtn.disabled = false; updateTempVisibility(); }
+}
+
+/* ---------- Open / New conversation ---------- */
+startBtn && startBtn.addEventListener('click', ()=> {
+  tempMode = false;
+  currentConversationId = makeConvoId();
+  localSaveInit(currentConversationId);
+  chatArea.innerHTML = '';
+  centerScreen.style.display = 'none';
+  chatArea.style.display = 'flex';
+  addSystemMsg('New chat started.');
+  updateTempVisibility();
+  refreshHistoryList();
+});
+newChatBtn && newChatBtn.addEventListener('click', ()=> {
+  tempMode = false;
+  currentConversationId = makeConvoId();
+  localSaveInit(currentConversationId);
+  chatArea.innerHTML = '';
+  centerScreen.style.display = 'none';
+  chatArea.style.display = 'flex';
+  addSystemMsg('New chat started.');
+  updateTempVisibility();
+  refreshHistoryList();
+});
+function openConversation(convoId){
+  tempMode = false;
+  currentConversationId = convoId;
+  const convo = loadConversation(convoId);
+  chatArea.innerHTML = '';
+  centerScreen.style.display = 'none';
+  chatArea.style.display = 'flex';
+  if(convo && convo.messages) for(const m of convo.messages) addBubble(m.role === 'user' ? 'user' : 'ai', m.text, false);
+  updateTempVisibility();
+}
+
+function confirmAndDelete(convoId){
+  if(!confirm("Delete this chat forever?")) return;
+  const all = getAllHistory();
+  if(all[convoId]) delete all[convoId];
+  setAllHistory(all);
+  refreshHistoryList();
+  if(currentConversationId === convoId){
+    currentConversationId = null;
+    chatArea.innerHTML = '';
+    centerScreen.style.display = 'flex';
+    chatArea.style.display = 'none';
+  }
+}
+
+/* ---------- Suggestion cards ---------- */
+document.querySelectorAll('.suggest-card').forEach(card=>{
+  card.onclick = ()=>{
+    const q = card.dataset.q;
+    input.value = q;
+    centerScreen.style.display='none';
+    chatArea.style.display='flex';
+    currentConversationId = makeConvoId();
+    localSaveInit(currentConversationId);
+    sendMessage();
+  };
+});
+
+/* ---------- Bind send & enter behavior ---------- */
+sendBtn && sendBtn.addEventListener('click', sendMessage);
+input && input.addEventListener('keydown', function(e) {
+  if(e.key === "Enter"){
+    if(e.shiftKey) return;
+    if(isMobile) return;
+    e.preventDefault();
+    sendMessage();
+  }
+});
+input && input.addEventListener('input', ()=> { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; });
+
+/* init: ensure conversation */
+if(!currentConversationId){ currentConversationId = makeConvoId(); localSaveInit(currentConversationId); }
+refreshHistoryList();
+centerScreen.style.display = 'flex';
+chatArea.style.display = 'none';
+updateTempVisibility();
+
+/* ---------- Premium UX improvements ---------- */
 function openPremium(mode='login'){
   premiumMode = mode;
-  P_EMAIL.style.display = mode === 'signup' ? 'block' : 'none';
-  P_SUBMIT.textContent = mode === 'signup' ? 'Create account' : 'Login';
-  P_TOGGLE.textContent = mode === 'signup' ? 'Switch to Login' : 'Switch to Signup';
-  P_MSG.textContent = '';
-  P_USERNAME.value = '';
-  P_PASSWORD.value = '';
-  PREMIUM_AUTH.style.display = 'flex';
-  PREMIUM_AUTH.classList.add("active");
-  document.body.style.overflow = 'hidden';
+  p_email.style.display = mode === 'signup' ? 'block' : 'none';
+  p_submit.textContent = mode === 'signup' ? 'Create account' : 'Login';
+  p_toggle.textContent = mode === 'signup' ? 'Switch to Login' : 'Switch to Signup';
+  p_msg.textContent = '';
+  p_username.value = ''; p_password.value = '';
+  premiumAuth.style.display = 'flex'; premiumAuth.classList.add('active');
+  showOverlay();
 }
 function closePremium(){
-  PREMIUM_AUTH.classList.remove("active");
-  document.body.style.overflow = '';
-  }
-
-
-P_CLOSE.onclick = closePremium;
-P_TOGGLE.onclick = () => openPremium(premiumMode === 'signup' ? 'login' : 'signup');
-P_GUEST.onclick = () => { ensureSessionId(); closePremium(); alert('Guest session active.'); };
-
-P_EYE.onclick = () => {
-  if(P_PASSWORD.type === 'password'){ P_PASSWORD.type = 'text'; P_EYE.textContent = '🙈'; }
-  else { P_PASSWORD.type = 'password'; P_EYE.textContent = '👁️'; }
+  premiumAuth.classList.remove('active'); premiumAuth.style.display = 'none';
+  hideOverlay();
 }
+premiumClose && premiumClose.addEventListener('click', closePremium);
+p_toggle && p_toggle.addEventListener('click', ()=> openPremium(p_toggle.textContent.includes('Signup') ? 'signup' : 'login'));
+p_guest && p_guest.addEventListener('click', ()=> { ensureSessionId(); closePremium(); p_msg.textContent = 'Guest session active'; setTimeout(()=> p_msg.textContent = '',1500); });
+p_eye && p_eye.addEventListener('click', ()=> { if(p_password.type === 'password'){ p_password.type='text'; p_eye.textContent='🙈'; } else { p_password.type='password'; p_eye.textContent='👁️'; } });
 
-// check username availability (signup)
 async function checkUsernameAvailable(un){
   try{
     const r = await fetch(`${API_BASE}/check_username?username=${encodeURIComponent(un)}`);
@@ -1587,48 +1406,48 @@ async function checkUsernameAvailable(un){
   }catch(e){ return false; }
 }
 
-P_SUBMIT.onclick = async () => {
-  const u = P_USERNAME.value.trim();
-  const p = P_PASSWORD.value;
-  const e = P_EMAIL.value.trim();
-
-  if(!u || !p){ P_MSG.textContent = 'username & password required'; return; }
-
-  if(premiumMode === 'signup'){
-    // unique username check
-    P_MSG.textContent = 'Checking availability...';
-    const ok = await checkUsernameAvailable(u);
-    if(!ok){ P_MSG.textContent = 'Username not available'; return; }
-  }
-
-  P_MSG.textContent = 'Contacting server...';
+p_submit && p_submit.addEventListener('click', async ()=>{
+  const u = p_username.value.trim(); const pass = p_password.value; const em = p_email.value.trim();
+  if(!u || !pass){ p_msg.textContent = 'username & password required'; return; }
+  if(premiumMode === 'signup'){ p_msg.textContent = 'Checking availability...'; const ok = await checkUsernameAvailable(u); if(!ok){ p_msg.textContent = 'Username not available'; return; } }
+  p_msg.textContent = 'Contacting server...';
   const url = premiumMode === 'signup' ? `${API_BASE}/signup` : `${API_BASE}/login`;
-  const body = premiumMode === 'signup' ? { username: u, password: p, email: e } : { username: u, password: p };
-
+  const body = premiumMode === 'signup' ? { username:u, password:pass, email:em } : { username:u, password:pass };
   try{
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body)
-    });
+    const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const data = await res.json();
-    if(!res.ok || !data.ok){
-      P_MSG.textContent = data.error || 'Auth failed';
-      return;
-    }
-    // store token & update UI
+    if(!res.ok || !data.ok){ p_msg.textContent = data.error || 'Auth failed'; return; }
     setToken(data.token);
-    P_MSG.textContent = '';
-    closePremium();
-    refreshAccountUI();
-    alert('Welcome, ' + (data.user.username || 'you') + ' — logged in!');
-  }catch(err){
-    console.error(err);
-    P_MSG.textContent = 'Network error';
-  }
-};
+    p_msg.textContent = 'Welcome!';
+    setTimeout(()=> { p_msg.textContent=''; closePremium(); refreshAccountUI(); }, 900);
+  }catch(err){ console.error(err); p_msg.textContent = 'Network error'; }
+});
 
-/* Left side account row creation & behavior */
+/* popup close on ESC */
+document.addEventListener('keydown', (e)=> {
+  if(e.key === 'Escape'){ closeAllSideModals(); closePremium(); }
+});
+
+/* utility to close all open side modals/panels */
+function closeAllSideModals(){
+  tempModal.style.display='none';
+  lettersModal.style.display='none';
+  tipModal.style.display='none';
+  sidePanel.classList.remove('open');
+  hideOverlay();
+}
+
+/* ---------- Auth helpers (same as before) ---------- */
+function ensureSessionId(){
+  let sid = localStorage.getItem('zultx_session');
+  if(!sid){ sid = 'sess_' + Math.random().toString(36).slice(2) + '_' + Date.now(); localStorage.setItem('zultx_session', sid); }
+  return sid;
+}
+function setToken(token){ if(token) localStorage.setItem('zultx_token', token); else localStorage.removeItem('zultx_token'); }
+function getToken(){ return localStorage.getItem('zultx_token'); }
+function loggedIn(){ return !!getToken(); }
+
+/* account row creation */
 (function addLeftAccountRow(){
   const side = document.querySelector('.side');
   if(!side) return;
@@ -1636,36 +1455,34 @@ P_SUBMIT.onclick = async () => {
   row.className = 'account-row';
   row.innerHTML = `<div><div style="font-weight:800">Account</div><div class="account-welcome" id="accWelcome">Not signed in</div></div><div><button id="accBtn" class="account-btn login">Login</button></div>`;
   side.insertBefore(row, side.firstChild);
-  // bind click
-  document.getElementById('accBtn').onclick = () => {
+  const accBtn = document.getElementById('accBtn');
+  accBtn && accBtn.addEventListener('click', ()=>{
     if(loggedIn()){
-      if(confirm("Log out?")) {
-        setToken(null);
-        refreshAccountUI();
-        alert('Logged out');
-      }
-    } else {
-      openPremium('login');
-    }
-  };
+      if(confirm("Log out?")){ setToken(null); refreshAccountUI(); alert('Logged out'); }
+    } else openPremium('login');
+  });
 })();
-
 function refreshAccountUI(){
-  const btn = document.getElementById('accBtn');
-  const welcome = document.getElementById('accWelcome');
+  const btn = document.getElementById('accBtn'); const welcome = document.getElementById('accWelcome');
   if(!btn || !welcome) return;
-  if(loggedIn()){
-    btn.classList.remove('login'); btn.classList.add('logout');
-    btn.textContent = 'Logout';
-    // fetch some user info optionally if backend supports /me (not implemented here)
-    welcome.textContent = 'Welcome — signed in';
-  } else {
-    btn.classList.add('login'); btn.classList.remove('logout');
-    btn.textContent = 'Login';
-    welcome.textContent = 'Not signed in';
-  }
+  if(loggedIn()){ btn.classList.remove('login'); btn.classList.add('logout'); btn.textContent = 'Logout'; welcome.textContent = 'Welcome — signed in'; }
+  else { btn.classList.add('login'); btn.classList.remove('logout'); btn.textContent = 'Login'; welcome.textContent = 'Not signed in'; }
 }
 refreshAccountUI();
+
+/* ---------- small helper: click outside chat area closes side on mobile (improve UX) ---------- */
+document.addEventListener('click', (e)=> {
+  // if side is open and click outside sidePanel on mobile -> close
+  if(sidePanel.classList.contains('open') && isMobile){
+    if(!sidePanel.contains(e.target) && !mobileMenuBtn.contains(e.target)){
+      sidePanel.classList.remove('open');
+      hideOverlay();
+    }
+  }
+});
+
+/* ---------- bootstrap done ---------- */
+console.log('ZultX UI loaded — tidy & robust.');
 </script>
 </body>
 </html>
