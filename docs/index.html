@@ -819,7 +819,7 @@ html.light .side .convo-item{
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div><strong>ZultX</strong><div class="small-muted">Your AI Assistant</div></div>
-      <div class="small-muted">USER</div>
+      <div class="small-muted" id="sideUserName">User</div>
     </div>
 
     <h3 style="margin-top:6px">Your Chats</h3>
@@ -1229,7 +1229,7 @@ function addBubble(kind, text, stream = true){
   const d = document.createElement('div');
   d.className = 'msg ' + (kind === 'user' ? 'user' : 'ai');
   if(kind === 'ai'){
-    if(stream) fakeStream(d, text, 5);
+    if(stream) fakeStream(d, text, 2);
     else { d.innerHTML = marked.parse(text); d.querySelectorAll("pre code").forEach(b => hljs.highlightElement(b)); enhanceCodeBlocks(d); }
   } else {
     d.textContent = text;
@@ -1459,6 +1459,7 @@ p_submit && p_submit.addEventListener('click', async ()=>{
     const data = await res.json();
     if(!res.ok || !data.ok){ p_msg.textContent = data.error || 'Auth failed'; return; }
     setToken(data.token);
+    localStorage.setItem('zultx_username', data.user.username);
     p_msg.textContent = 'Welcome!';
     setTimeout(()=> { p_msg.textContent=''; closePremium(); refreshAccountUI(); }, 900);
   }catch(err){ console.error(err); p_msg.textContent = 'Network error'; }
@@ -1499,16 +1500,35 @@ function loggedIn(){ return !!getToken(); }
   const accBtn = document.getElementById('accBtn');
   accBtn && accBtn.addEventListener('click', ()=>{
     if(loggedIn()){
-      if(confirm("Log out?")){ setToken(null); refreshAccountUI(); p_msg.textContent = 'Logged out'; setTimeout(()=> p_msg.textContent='',1500); }
+      if(confirm("Log out?")){ setToken(null); localStorage.removeItem('zultx_username'); refreshAccountUI(); p_msg.textContent = 'Logged out'; setTimeout(()=> p_msg.textContent='',1500); }
     } else openPremium('login');
   });
 })();
+  
 function refreshAccountUI(){
-  const btn = document.getElementById('accBtn'); const welcome = document.getElementById('accWelcome');
-  if(!btn || !welcome) return;
-  if(loggedIn()){ btn.classList.remove('login'); btn.classList.add('logout'); btn.textContent = 'Logout'; welcome.textContent = 'Welcome — signed in'; }
-  else { btn.classList.add('login'); btn.classList.remove('logout'); btn.textContent = 'Login'; welcome.textContent = 'Not signed in'; }
+  const btn = document.getElementById('accBtn');
+  const welcome = document.getElementById('accWelcome');
+  const sideName = document.getElementById('sideUserName');
+
+  const username = localStorage.getItem('zultx_username');
+
+  if(loggedIn()){
+    btn.classList.remove('login');
+    btn.classList.add('logout');
+    btn.textContent = 'Logout';
+
+    welcome.textContent = 'Welcome — ' + (username || 'User');
+    if(sideName) sideName.textContent = username || 'User';
+  } else {
+    btn.classList.add('login');
+    btn.classList.remove('logout');
+    btn.textContent = 'Login';
+
+    welcome.textContent = 'Not signed in';
+    if(sideName) sideName.textContent = 'User';
+  }
 }
+
 refreshAccountUI();
 
 /* ---------- small helper: click outside chat area closes side on mobile (improve UX) ---------- */
