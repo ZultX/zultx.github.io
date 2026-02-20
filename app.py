@@ -658,17 +658,21 @@ async def get_suggestions(request: Request):
 
     if ASK_FUNC:
         prompt = f"""
-Generate 6 short, engaging suggestion prompts for a chat AI homepage.
-If user history exists, personalize using these topics:
-{user_topics}
+Generate exactly 3 short homepage suggestions for a chat AI.
 
-Also consider these trending topics:
-{global_topics}
+Rules:
+- Each line must start with a relevant emoji.
+- Maximum 6 words per suggestion.
+- Make them exciting and curiosity-driven.
+- No numbering.
+- No explanations.
+- Plain text lines only.
 
-Make them exciting and curiosity-driven.
-Only return plain lines. No numbering.
+Personalize if possible using:
+User topics: {user_topics}
+
+Trending topics: {global_topics}
 """
-
         try:
             result = ASK_FUNC(
                 user_input=prompt,
@@ -692,7 +696,7 @@ Only return plain lines. No numbering.
             "Will humans colonize Mars?"
         ]
 
-    return {"suggestions": suggestions[:6]}
+    return {"suggestions": suggestions[:3]}
 
 # health
 @app.get("/health")
