@@ -672,13 +672,13 @@ Generate exactly 3 short homepage suggestion questions for a chat AI.
 
 Rules:
 - Each line must start with a relevant emoji.
-- Maximum 9 words per suggestion question.
-- Make them exciting and curiosity-driven.
+- Maximum 6 words per suggestion question.
+- Make them exciting and very curiosity-driven.
 - No numbering.
 - No explanations.
 - Plain text lines only.
 - Sometimes make suggestion questions with trending topics.
-- Make clean and short suggestion questions
+- Make clean and short suggestion questions.
 
 Personalize if possible using:
 User topics: {user_topics}
