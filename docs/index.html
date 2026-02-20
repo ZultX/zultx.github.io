@@ -1026,6 +1026,53 @@ tempChatBtn && tempChatBtn.addEventListener('click', ()=>{
   tempModal.style.display = 'block';
   showOverlay();
 });
+async function sendMessageFromSuggestion(text){
+  if(!text) return;
+
+  if(!currentConversationId){
+    currentConversationId = makeConvoId();
+    localSaveInit(currentConversationId);
+  }
+
+  addUserMsg(text);
+
+  sendBtn.disabled = true;
+
+  let aiDiv = document.createElement('div');
+  aiDiv.className = 'msg ai thinking';
+  aiDiv.innerHTML = `<div class="ai-pulse"></div>`;
+  chatArea.appendChild(aiDiv);
+
+  try{
+    const token = getToken();
+    const sessionId = ensureSessionId();
+    const headers = { "Accept":"application/json", "X-Session-Id": sessionId };
+    if(token) headers["Authorization"] = "Bearer " + token;
+
+    const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, {
+      method:"GET",
+      headers
+    });
+
+    if(!res.ok) throw new Error("Server error");
+
+    const data = await res.json();
+    const answer = data?.answer || "No response.";
+
+    aiDiv.classList.remove("thinking");
+    fakeStream(aiDiv, answer, 0);
+
+    saveMessageToHistory(currentConversationId, 'ai', answer);
+
+  } catch(err){
+    console.error(err);
+    aiDiv.classList.remove("thinking");
+    aiDiv.textContent = "⚠️ Connection error.";
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
 
 /* start a fresh temporary chat (not saved) */
 function createTempConversation(){
@@ -1056,15 +1103,14 @@ async function loadSuggestions() {
       card.innerText = text;
 
       card.onclick = () => {
-        input.value = text;
         centerScreen.style.display = 'none';
         chatArea.style.display = 'flex';
         currentConversationId = makeConvoId();
         localSaveInit(currentConversationId);
-        sendMessage();
-      };
+        sendMessageFromSuggestion(text);
+};
 
-      grid.appendChild(card);
+     grid.appendChild(card);
     });
 
   } catch (err) {
