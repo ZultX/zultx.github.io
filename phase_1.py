@@ -450,3 +450,284 @@ def set_health_hook(fn: Optional[Callable[[], Dict[str, bool]]]):
     global health_check_hook
     health_check_hook = fn
     
+# --------------------
+# << APPEND: Multimodal glue + helpers + safe router rebuild >>
+# Paste this at the end of phase_1.py
+# --------------------
+import base64
+from io import BytesIO
+from typing import Any
+
+# --- Safe define adapters only if missing (so re-running cell is safe) ---
+if "ImageGenAdapter" not in globals():
+    class ImageGenAdapter(ModelAdapter):
+        name = "imagegen"
+        supports_stream = False
+
+        def __init__(self, provider: str = None, api_key: Optional[str] = None, model: Optional[str] = None):
+            super().__init__()
+            self.provider = (provider or os.getenv("IMAGE_PROVIDER", "openai")).lower()
+            self.key = api_key
+            self.model = model
+            self._init_provider_settings()
+
+        def _init_provider_settings(self):
+            prov = self.provider
+            if prov == "stability":
+                self.key = self.key or os.getenv("STABILITY_KEY")
+                self.endpoint = "https://api.stability.ai/v1/generation"
+                self.engine = os.getenv("STABILITY_ENGINE", "stable-diffusion-v1-5")
+            elif prov == "openrouter":
+                self.key = self.key or os.getenv("OPENROUTER_API_KEY")
+                self.endpoint = os.getenv("OPENROUTER_IMAGE_ENDPOINT", "https://openrouter.ai/api/v1/images/generate")
+                self.model = self.model or os.getenv("OPENROUTER_IMAGE_MODEL", "stability/stable-diffusion-v1")
+            else:  # openai default
+                self.key = self.key or os.getenv("OPENAI_KEY")
+                self.endpoint = "https://api.openai.com/v1/images/generations"
+                self.model = self.model or os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
+
+        def check_ready(self):
+            return bool(self.key)
+
+        def generate(self, prompt: str, stream: bool = False, timeout: int = DEFAULT_TIMEOUT):
+            if not self.check_ready():
+                raise ModelFailure("imagegen-missing-key")
+            if not self.bucket.consume():
+                raise ModelFailure("rate_limited")
+            prov = self.provider
+            try:
+                if prov == "stability":
+                    url = f"{self.endpoint}/{self.engine}/text-to-image"
+                    headers = {"Authorization": f"Bearer {self.key}", "Content-Type":"application/json"}
+                    payload = {"text_prompts":[{"text": prompt}], "width":512, "height":512}
+                    r = requests.post(url, json=payload, headers=headers, timeout=timeout)
+                    r.raise_for_status()
+                    j = r.json()
+                    b64 = j.get("artifacts",[{}])[0].get("base64")
+                    if b64:
+                        return base64.b64decode(b64)
+                    return str(j)
+                elif prov == "openrouter":
+                    headers = {"Authorization": f"Bearer {self.key}", "Content-Type":"application/json"}
+                    payload = {"model": self.model, "prompt": prompt}
+                    r = requests.post(self.endpoint, json=payload, headers=headers, timeout=timeout)
+                    r.raise_for_status()
+                    j = r.json()
+                    b64 = (j.get("output",{}) or {}).get("images", [{}])[0].get("b64") or (j.get("data",[{}])[0].get("b64"))
+                    if b64:
+                        return base64.b64decode(b64)
+                    return str(j)
+                else:  # openai
+                    headers = {"Authorization": f"Bearer {self.key}", "Content-Type":"application/json"}
+                    payload = {"model": self.model, "prompt": prompt, "size":"1024x1024"}
+                    r = requests.post(self.endpoint, json=payload, headers=headers, timeout=timeout)
+                    r.raise_for_status()
+                    j = r.json()
+                    # try a few fields
+                    b64 = j.get("data",[{}])[0].get("b64_json") or j.get("data",[{}])[0].get("b64")
+                    if b64:
+                        return base64.b64decode(b64)
+                    url = j.get("data",[{}])[0].get("url")
+                    if url:
+                        return requests.get(url, timeout=timeout).content
+                    return str(j)
+            except Exception as e:
+                self.mark_unhealthy()
+                raise ModelFailure(f"imagegen-error: {e}")
+
+if "WhisperASRAdapter" not in globals():
+    class WhisperASRAdapter(ModelAdapter):
+        name = "whisper-asr"
+        supports_stream = False
+
+        def __init__(self, api_key: Optional[str] = None):
+            super().__init__()
+            self.key = api_key or os.getenv("OPENAI_KEY")
+            self.endpoint = "https://api.openai.com/v1/audio/transcriptions"
+
+        def check_ready(self):
+            return bool(self.key)
+
+        def generate(self, audio_bytes: bytes, stream: bool = False, timeout: int = DEFAULT_TIMEOUT):
+            if not self.check_ready():
+                raise ModelFailure("whisper-missing-key")
+            if not self.bucket.consume():
+                raise ModelFailure("rate_limited")
+            try:
+                # OpenAI expects form-data file
+                files = {"file": ("audio.wav", audio_bytes)}
+                data = {"model": os.getenv("WHISPER_MODEL","whisper-1")}
+                headers = {"Authorization": f"Bearer {self.key}"}
+                r = requests.post(self.endpoint, headers=headers, files=files, data=data, timeout=timeout)
+                r.raise_for_status()
+                return r.json().get("text","")
+            except Exception as e:
+                self.mark_unhealthy()
+                raise ModelFailure(f"whisper-error: {e}")
+
+if "ElevenLabsTTSAdapter" not in globals():
+    class ElevenLabsTTSAdapter(ModelAdapter):
+        name = "elevenlabs-tts"
+        supports_stream = False
+
+        def __init__(self, api_key: Optional[str] = None, voice: Optional[str] = None):
+            super().__init__()
+            self.key = api_key or os.getenv("ELEVENLABS_KEY")
+            self.voice = voice or os.getenv("ELEVENLABS_VOICE", "alloy")
+            self.endpoint_base = "https://api.elevenlabs.io/v1"
+
+        def check_ready(self):
+            return bool(self.key)
+
+        def generate(self, text: str, stream: bool = False, timeout: int = DEFAULT_TIMEOUT):
+            if not self.check_ready():
+                raise ModelFailure("elevenlabs-key-missing")
+            if not self.bucket.consume():
+                raise ModelFailure("rate_limited")
+            url = f"{self.endpoint_base}/text-to-speech/{self.voice}"
+            headers = {"xi-api-key": self.key, "Content-Type":"application/json"}
+            payload = {"text": text, "voice": self.voice, "model":"eleven_monolingual_v1"}
+            try:
+                r = requests.post(url, json=payload, headers=headers, timeout=timeout)
+                r.raise_for_status()
+                return r.content
+            except Exception as e:
+                self.mark_unhealthy()
+                raise ModelFailure(f"elevenlabs-tts-error: {e}")
+
+# --- Helper: speak(text) -> bytes (TTS) ---
+def speak(text: str, timeout: int = DEFAULT_TIMEOUT) -> bytes:
+    """Return audio bytes from first available TTS adapter (ElevenLabs)."""
+    for a in (_router.adapters if "_router" in globals() else []):
+        if getattr(a, "name", "") == "elevenlabs-tts" and a.check_ready():
+            return a.generate(text, stream=False, timeout=timeout)
+    raise ModelFailure("no-tts-available")
+
+# --- Safe rebuild of default router (fixes constructor arg mismatch and wires multimodal adapters) ---
+def rebuild_router_with_multimodal():
+    """Call this to rebuild global _router with multimodal adapters included.
+       Safe to call multiple times."""
+    adapters: List[ModelAdapter] = []
+    # Step/flash fast model (OpenRouter) — pass key via named param 'key' (convenience adapters expect key)
+    try:
+        adapters.append(StepFlashOpenRouter(key=OPENROUTER_KEY))
+    except Exception:
+        # fallback instantiate by positional if previous signature differs
+        try: adapters.append(StepFlashOpenRouter(OPENROUTER_KEY))
+        except Exception: pass
+
+    try:
+        adapters.append(TrinityOpenRouter(key=OPENROUTER_KEY))
+    except Exception:
+        try: adapters.append(TrinityOpenRouter(OPENROUTER_KEY))
+        except Exception: pass
+
+    adapters.append(OpenRouterAdapter(model_name="openai/gpt-4o-mini", api_key=OPENROUTER_KEY))
+    adapters.append(MistralAdapter(api_key=MISTRAL_KEY))
+    # multimodal
+    adapters.append(ImageGenAdapter())
+    adapters.append(WhisperASRAdapter())
+    adapters.append(ElevenLabsTTSAdapter())
+    # optional OpenAI fallback
+    if OPENAI_KEY:
+        class _OpenAIAdapter(ModelAdapter):
+            name = "openai"
+            supports_stream = True
+            def __init__(self, key):
+                super().__init__()
+                self.key = key
+                self.endpoint = "https://api.openai.com/v1/chat/completions"
+            def check_ready(self): return bool(self.key)
+            def generate(self, prompt, stream=False, timeout=DEFAULT_TIMEOUT):
+                if not self.check_ready(): raise ModelFailure("openai-missing")
+                if not self.bucket.consume(): raise ModelFailure("rate_limited")
+                payload = {"model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"), "messages":[{"role":"user","content":prompt}], "stream": bool(stream)}
+                headers = {"Authorization": f"Bearer {self.key}", "Content-Type":"application/json"}
+                r = requests.post(self.endpoint, json=payload, headers=headers, timeout=timeout, stream=bool(stream))
+                r.raise_for_status()
+                if not stream:
+                    return r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                def gen():
+                    for line in r.iter_lines(decode_unicode=True):
+                        if not line: continue
+                        s = line.strip()
+                        if s.startswith("data: "): s = s[len("data: "):]
+                        if s == "[DONE]": break
+                        try:
+                            obj = json.loads(s)
+                            delta = obj.get("choices",[{}])[0].get("delta", {}).get("content")
+                            if delta: yield delta
+                        except Exception:
+                            yield s
+                return gen()
+        adapters.append(_OpenAIAdapter(OPENAI_KEY))
+
+    # replace global router
+    global _router
+    _router = ModelRouter(adapters)
+    _emit_metric("router_rebuilt", {"adapters": [getattr(a,"name",str(a)) for a in adapters]})
+    return _router
+
+# --- Patch ModelRouter.ask to auto-route audio bytes to Whisper (safe monkeypatch) ---
+if getattr(ModelRouter, "_mm_patched", False) is False:
+    def _patched_ask(self, prompt: Union[str, bytes], stream: bool = False, timeout: int = DEFAULT_TIMEOUT):
+        # If raw bytes are provided -> treat as audio and send to whisper-asr adapter
+        if isinstance(prompt, (bytes, bytearray)):
+            for a in self.adapters:
+                if getattr(a, "name", "") == "whisper-asr" and a.check_ready():
+                    _emit_metric("route_audio_to_whisper", {"time": now_s()})
+                    return a.generate(bytes(prompt), stream=False, timeout=timeout)
+            # if no whisper available -> graceful message
+            raise ModelFailure("no-asr-available")
+        # otherwise, normal text flow (reuse earlier router algorithm but minimal)
+        complexity = detect_complexity(prompt if isinstance(prompt, str) else str(prompt))
+        intent = detect_intent(prompt if isinstance(prompt, str) else str(prompt))
+        _emit_metric("route_selected", {"intent": intent, "complexity": complexity, "time": now_s()})
+        candidates = self._candidates_for_intent(intent, complexity)
+        last_err = None
+        for adapter in candidates:
+            try:
+                if not adapter.check_ready():
+                    _emit_metric("adapter_skipped_not_ready", {"adapter": adapter.name})
+                    continue
+                for attempt in range(1, MAX_ATTEMPTS + 1):
+                    try:
+                        _emit_metric("adapter_attempt", {"adapter": adapter.name, "attempt": attempt})
+                        out = adapter.generate(prompt, stream=stream, timeout=timeout)
+                        _emit_metric("adapter_success", {"adapter": adapter.name, "attempt": attempt})
+                        return out
+                    except ModelFailure as mf:
+                        last_err = mf
+                        if "rate_limited" in str(mf).lower():
+                            _emit_metric("adapter_rate_limited", {"adapter": adapter.name})
+                            break
+                        backoff = BACKOFF_BASE * (2 ** (attempt - 1))
+                        time.sleep(backoff)
+                        continue
+            except Exception as e:
+                last_err = e
+                _emit_metric("adapter_unexpected_error", {"adapter": getattr(adapter, "name", "unknown"), "err": str(e)})
+                traceback.print_exc()
+                continue
+        msg = "ZULTX brain temporarily unavailable. Try again in a moment."
+        _emit_metric("router_all_failed", {"err": str(last_err)})
+        if stream:
+            def g():
+                for ch in msg:
+                    yield ch
+                    time.sleep(0.003)
+            return g()
+        return msg
+
+    ModelRouter.ask = _patched_ask
+    ModelRouter._mm_patched = True
+
+# --- Ensure router is rebuilt with multimodal adapters available ---
+if "_router" not in globals() or not isinstance(_router, ModelRouter):
+    rebuild_router_with_multimodal()
+else:
+    # safe rebuild to include multimodal adapters and fix signatures if current router doesn't have them
+    try:
+        rebuild_router_with_multimodal()
+    except Exception:
+        pass
