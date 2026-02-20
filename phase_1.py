@@ -372,9 +372,8 @@ def build_default_router() -> ModelRouter:
     adapters: List[ModelAdapter] = []
     # Prioritized: local/free fast -> normal -> heavy direct
     # Step / flash fast model (OpenRouter)
-    adapters.append(StepFlashOpenRouter(api_key=OPENROUTER_KEY))
-    # Trinity preview (OpenRouter free high-quality)
-    adapters.append(TrinityOpenRouter(api_key=OPENROUTER_KEY))
+    adapters.append(StepFlashOpenRouter(key=OPENROUTER_KEY))
+    adapters.append(TrinityOpenRouter(key=OPENROUTER_KEY))
     # Generic OpenRouter wrapper as fallback (if you want other models)
     adapters.append(OpenRouterAdapter(model_name="openai/gpt-4o-mini", api_key=OPENROUTER_KEY))
     # Mistral direct (heavy reasoning)
