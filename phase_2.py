@@ -36,7 +36,7 @@ def load_manifest():
         raise FileNotFoundError("manifest.json missing in adapters directory")
     return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     
-_MANIFEST = load_manifest()
+manifest = load_manifest()
 
 def load_adapters():
     adapters = {}
