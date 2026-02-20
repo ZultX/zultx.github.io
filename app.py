@@ -607,6 +607,93 @@ async def ask_get(
 
     return JSONResponse({"answer": text})
 
+
+@app.get("/suggestions")
+async def get_suggestions(request: Request):
+    owner, session_id = extract_user_and_session(request)
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    try:
+        # 1️⃣ Get user recent topics
+        user_topics = []
+        if owner:
+            cur.execute("""
+                SELECT content FROM conversations
+                WHERE owner = %s AND role = 'user'
+                ORDER BY ts DESC
+                LIMIT 10
+            """, (owner,))
+            rows = cur.fetchall()
+            user_topics = [r[0] for r in rows]
+
+        # 2️⃣ Get global trending topics
+        cur.execute("""
+            SELECT content FROM conversations
+            WHERE role = 'user'
+            ORDER BY ts DESC
+            LIMIT 30
+        """)
+        global_rows = cur.fetchall()
+        global_topics = [r[0] for r in global_rows]
+
+    finally:
+        cur.close()
+        _put_conn(conn)
+
+    # Clean & compress topics
+    def clean_topics(texts):
+        cleaned = []
+        for t in texts:
+            if len(t) > 8 and len(t) < 120:
+                cleaned.append(t.strip())
+        return cleaned[:5]
+
+    user_topics = clean_topics(user_topics)
+    global_topics = clean_topics(global_topics)
+
+    # 3️⃣ If phase4 AI available → generate smart suggestions
+    suggestions = []
+
+    if ASK_FUNC:
+        prompt = f"""
+Generate 6 short, engaging suggestion prompts for a chat AI homepage.
+If user history exists, personalize using these topics:
+{user_topics}
+
+Also consider these trending topics:
+{global_topics}
+
+Make them exciting and curiosity-driven.
+Only return plain lines. No numbering.
+"""
+
+        try:
+            result = ASK_FUNC(
+                user_input=prompt,
+                session_id=None,
+                user_id=None,
+                stream=False
+            )
+            text = await normalize_result_to_text(result)
+            suggestions = [line.strip() for line in text.split("\n") if line.strip()]
+        except:
+            pass
+
+    # 4️⃣ Fallback if AI fails
+    if not suggestions:
+        suggestions = [
+            "Explain quantum computing simply",
+            "How will AI change the world?",
+            "Best study methods for exams",
+            "Is multiverse theory real?",
+            "How to stay motivated daily?",
+            "Will humans colonize Mars?"
+        ]
+
+    return {"suggestions": suggestions[:6]}
+
 # health
 @app.get("/health")
 def health():
