@@ -1405,38 +1405,159 @@ function localSaveInit(convoId){
 }
 
 /* ---------- Send message flow ---------- */
-async function sendMessage(){
+let activeController = null;
+
+async function sendMessage() {
   const text = input.value.trim();
-  if(!text) return;
-  centerScreen.style.display = 'none'; chatArea.style.display = 'flex';
-  if(!currentConversationId){
+  if (!text) return;
+
+  // Prevent double-send
+  if (sendBtn.disabled) return;
+
+  centerScreen.style.display = "none";
+  chatArea.style.display = "flex";
+
+  if (!currentConversationId) {
     currentConversationId = makeConvoId();
     localSaveInit(currentConversationId);
   }
+
   addUserMsg(text);
-  input.value = '';
+  input.value = "";
+  input.style.height = "auto";
   sendBtn.disabled = true;
 
-  let aiDiv = document.createElement('div'); aiDiv.className = 'msg ai thinking'; aiDiv.innerHTML = `<div class="ai-pulse"></div>`;
+  // Abort any previous stream
+  if (activeController) {
+    activeController.abort();
+  }
+
+  const controller = new AbortController();
+  activeController = controller;
+
+  const aiDiv = document.createElement("div");
+  aiDiv.className = "msg ai thinking";
+  aiDiv.innerHTML = `<div class="ai-pulse"></div>`;
   chatArea.appendChild(aiDiv);
-  try{
+
+  let fullText = "";
+  let firstChunk = true;
+  let renderBuffer = "";
+  let lastRenderTime = 0;
+
+  const shouldAutoScroll = () => {
+    const threshold = 120;
+    return (
+      chatArea.scrollHeight - chatArea.scrollTop - chatArea.clientHeight <
+      threshold
+    );
+  };
+
+  const smartRender = (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastRenderTime < 40) return;
+    lastRenderTime = now;
+
+    aiDiv.innerHTML = marked.parse(fullText);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  };
+
+  try {
     const token = getToken();
     const sessionId = ensureSessionId();
-    const headers = { "Accept":"application/json", "X-Session-Id": sessionId };
-    if(token) headers["Authorization"] = "Bearer " + token;
-    const res = await fetch(`${API_BASE}/ask?q=${encodeURIComponent(text)}`, { method:"GET", headers });
-    if(!res.ok) throw new Error('Server error');
-    const data = await res.json();
-    const answer = data?.answer || "No response.";
-    aiDiv.classList.remove("thinking");
-    fakeStream(aiDiv, answer, 0);
-    saveMessageToHistory(currentConversationId, 'ai', answer);
-  }catch(err){
-    console.error(err);
-    aiDiv.textContent = "⚠️ Connection error.";
-  }finally{ sendBtn.disabled = false; updateTempVisibility(); }
-}
 
+    const headers = {
+      Accept: "text/event-stream",
+      "X-Session-Id": sessionId,
+    };
+
+    if (token) headers["Authorization"] = "Bearer " + token;
+
+    const response = await fetch(
+      `${API_BASE}/ask-stream?q=${encodeURIComponent(text)}`,
+      {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      }
+    );
+
+    if (!response.ok || !response.body) {
+      throw new Error("Streaming not supported or server error");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+
+    let autoScroll = true;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split("\n");
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+
+        const data = line.slice(6).trim();
+
+        if (data === "[DONE]") {
+          smartRender(true);
+
+          aiDiv.querySelectorAll("pre code").forEach((block) =>
+            hljs.highlightElement(block)
+          );
+          enhanceCodeBlocks(aiDiv);
+
+          saveMessageToHistory(
+            currentConversationId,
+            "ai",
+            fullText
+          );
+
+          updateTempVisibility();
+          sendBtn.disabled = false;
+          activeController = null;
+          return;
+        }
+
+        if (firstChunk) {
+          aiDiv.classList.remove("thinking");
+          firstChunk = false;
+        }
+
+        fullText += data;
+
+        if (shouldAutoScroll()) {
+          autoScroll = true;
+        } else {
+          autoScroll = false;
+        }
+
+        smartRender(false);
+
+        if (autoScroll) {
+          chatArea.scrollTop = chatArea.scrollHeight;
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name === "AbortError") {
+      aiDiv.classList.remove("thinking");
+      aiDiv.innerHTML += `<div class="small-muted">⚠️ Response stopped.</div>`;
+    } else {
+      console.error(err);
+      aiDiv.classList.remove("thinking");
+      aiDiv.innerHTML =
+        "⚠️ Connection error. Please try again.";
+    }
+  } finally {
+    sendBtn.disabled = false;
+    activeController = null;
+  }
+}
 /* ---------- Open / New conversation ---------- */
 startBtn && startBtn.addEventListener('click', ()=> {
   tempMode = false;
