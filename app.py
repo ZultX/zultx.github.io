@@ -550,7 +550,7 @@ async def ask_get(
 
     try:
         owner, session_id = extract_user_and_session(request)
-
+        source = request.query_params.get("source")
         # Debugging log for production troubleshooting (will appear in Railway logs)
         print(f"[ask] owner={owner} session_id={session_id} memory_mode={memory_mode} using_phase4={ASK_FUNC is not None}")
 
@@ -561,6 +561,17 @@ async def ask_get(
             pass
 
         # Build kwargs to match phase4_ask signature (it expects user_input, session_id, user_id, ...)
+        if source == "suggestion":
+            q = f"""
+Respond directly and informatively.
+Do not greet.
+Do not say hello.
+Explain user statement when needed.
+Answer clearly and concisely.
+
+User request:
+{q}
+"""
         kwargs = {
             "user_input": q,
             "session_id": session_id,
@@ -611,7 +622,7 @@ async def ask_get(
 @app.get("/suggestions")
 async def get_suggestions(request: Request):
     owner, session_id = extract_user_and_session(request)
-
+    
     conn = _get_conn()
     cur = conn.cursor()
 
@@ -655,18 +666,19 @@ async def get_suggestions(request: Request):
 
     # 3️⃣ If phase4 AI available → generate smart suggestions
     suggestions = []
-
     if ASK_FUNC:
         prompt = f"""
-Generate exactly 3 short homepage suggestions for a chat AI.
+Generate exactly 3 short homepage suggestion questions for a chat AI.
 
 Rules:
 - Each line must start with a relevant emoji.
-- Maximum 6 words per suggestion.
+- Maximum 9 words per suggestion question.
 - Make them exciting and curiosity-driven.
 - No numbering.
 - No explanations.
 - Plain text lines only.
+- Sometimes make suggestion questions with trending topics.
+- Make clean and short suggestion questions
 
 Personalize if possible using:
 User topics: {user_topics}
