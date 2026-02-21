@@ -619,6 +619,72 @@ User request:
 
     return JSONResponse({"answer": text})
 
+# Try importing phase1 multimodal
+try:
+    from phase1 import ask as phase1_ask
+    from phase1 import speak as phase1_speak
+    print("[ZULTX] Phase1 multimodal loaded.")
+except Exception:
+    phase1_ask = None
+    phase1_speak = None
+    print("[ZULTX] Phase1 not available.")
+
+@app.post("/generate-image")
+async def generate_image(payload: dict = Body(...)):
+    if not phase1_ask:
+        raise HTTPException(status_code=500, detail="Phase1 not available")
+
+    prompt = payload.get("prompt")
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Missing prompt")
+
+    try:
+        result = phase1_ask(prompt, stream=False)
+
+        if isinstance(result, (bytes, bytearray)):
+            encoded = base64.b64encode(result).decode("utf-8")
+            return JSONResponse({"image_base64": encoded})
+
+        return JSONResponse({"error": "Image generation failed"})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+from fastapi import UploadFile, File
+
+@app.post("/transcribe")
+async def transcribe(file: UploadFile = File(...)):
+    if not phase1_ask:
+        raise HTTPException(status_code=500, detail="Phase1 not available")
+
+    try:
+        audio_bytes = await file.read()
+        text = phase1_ask(audio_bytes, stream=False)
+
+        return JSONResponse({"transcription": str(text)})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/speak")
+async def speak(payload: dict = Body(...)):
+    if not phase1_speak:
+        raise HTTPException(status_code=500, detail="Phase1 not available")
+
+    text = payload.get("text")
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing text")
+
+    try:
+        audio_bytes = phase1_speak(text)
+        encoded = base64.b64encode(audio_bytes).decode("utf-8")
+
+        return JSONResponse({"audio_base64": encoded})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 
 @app.get("/suggestions")
 async def get_suggestions(request: Request):
